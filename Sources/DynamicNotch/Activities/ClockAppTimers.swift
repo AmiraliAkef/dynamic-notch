@@ -110,6 +110,19 @@ final class ClockDatabaseReader: @unchecked Sendable {
         case stopped = 1, paused = 2, running = 3, firing = 4
     }
 
+    /// Debug: which step of reading Clock's files fails, with errno.
+    static func probe() -> [String: String] {
+        var out: [String: String] = [:]
+        let dir = (path as NSString).deletingLastPathComponent
+        for (label, target) in [("dir", dir), ("db", path), ("wal", path + "-wal"), ("shm", path + "-shm")] {
+            errno = 0
+            let fd = open(target, O_RDONLY)
+            out[label] = fd >= 0 ? "ok" : "errno \(errno) \(String(cString: strerror(errno)))"
+            if fd >= 0 { close(fd) }
+        }
+        return out
+    }
+
     func read() -> Result<[ClockTimer], ClockReadError> {
         guard FileManager.default.fileExists(atPath: Self.path) else {
             return .failure(ClockReadError(message: "Clock timer database not found"))

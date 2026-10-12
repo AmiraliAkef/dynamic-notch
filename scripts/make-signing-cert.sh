@@ -7,8 +7,25 @@
 set -euo pipefail
 
 NAME="Dynamic Notch Local Signing"
-if security find-certificate -c "$NAME" ~/Library/Keychains/login.keychain-db >/dev/null 2>&1; then
-  echo "Certificate '$NAME' already exists."
+KEYCHAIN=~/Library/Keychains/login.keychain-db
+
+# macOS only ties permissions to a certificate it trusts for code signing;
+# otherwise grants are pinned to one build's hash and lost on rebuild.
+# Asks for your password.
+trust() {
+  local pem=$(mktemp)
+  security find-certificate -c "$NAME" -p $KEYCHAIN > "$pem"
+  security add-trusted-cert -r trustRoot -p codeSign -k $KEYCHAIN "$pem"
+  rm -f "$pem"
+}
+
+if security find-certificate -c "$NAME" $KEYCHAIN >/dev/null 2>&1; then
+  if security find-identity -v -p codesigning | grep -q "$NAME"; then
+    echo "Certificate '$NAME' already exists and is trusted."
+  else
+    trust
+    echo "Trusted '$NAME' for code signing."
+  fi
   exit 0
 fi
 
@@ -36,4 +53,5 @@ openssl pkcs12 -export -inkey "$TMP/key.pem" -in "$TMP/cert.pem" \
 # -T lets codesign use the key without a keychain prompt.
 security import "$TMP/cert.p12" -k ~/Library/Keychains/login.keychain-db \
   -P "$PASS" -T /usr/bin/codesign >/dev/null
-echo "Created '$NAME' in your login keychain."
+trust
+echo "Created and trusted '$NAME' in your login keychain."

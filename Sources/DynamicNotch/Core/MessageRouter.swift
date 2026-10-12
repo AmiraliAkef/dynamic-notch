@@ -45,6 +45,7 @@ enum MessageRouter {
                 "clockStatus": ClockTimerWatcher.shared.status ?? "ok",
                 "clockTimers": ClockTimerWatcher.shared.timers.map { "\($0.id) \($0.remaining())" },
                 "clockEnabled": Settings.shared.bool(Settings.Key.clockTimers),
+                "clockProbe": ClockDatabaseReader.probe(),
                 "mediaPlaying": NowPlayingStore.shared.info.isPlaying,
                 "mediaBundle": NowPlayingStore.shared.info.bundleID ?? "none",
                 "audioLevels": AudioVisualizer.shared.levels.current(count: LevelStore.bandCount)?
