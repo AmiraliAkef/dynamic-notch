@@ -16,7 +16,7 @@ A Dynamic Island for the MacBook notch. It lives around the camera notch and sho
 ./build.sh --install  # copies it to /Applications and launches it
 ```
 
-Requires Xcode 16+ (Swift 6) on macOS 14+. Then, from the menu bar icon:
+Requires Xcode 16+ (Swift 6) on macOS 14+. Run `scripts/make-signing-cert.sh` once first: it creates a local signing certificate so macOS remembers permissions across rebuilds (ad-hoc builds lose them every time). Then, from the menu bar icon:
 
 - **Install Claude Code hooks** adds a hook to each event in `~/.claude/settings.json` (a backup is saved next to it).
 - **Install shell integration (zsh)** adds one `source` line to `~/.zshrc`.

@@ -40,9 +40,20 @@ cat > $APP/Contents/Info.plist <<PLIST
 </plist>
 PLIST
 
-codesign --force --sign - $APP/Contents/Resources/MediaRemoteHelper.dylib
-codesign --force --sign - $APP/Contents/MacOS/notch
-codesign --force --sign - --identifier com.amirali.dynamicnotch $APP
+# Sign with a stable local certificate so privacy permissions (Full Disk
+# Access, System Audio Recording…) survive rebuilds; ad-hoc signatures change
+# every build and macOS would forget the grants. Create it once with
+# scripts/make-signing-cert.sh.
+IDENTITY=$(security find-certificate -c "Dynamic Notch Local Signing" -Z ~/Library/Keychains/login.keychain-db 2>/dev/null \
+  | awk '/SHA-1 hash:/ {print $3}')
+if [[ -z $IDENTITY ]]; then
+  echo "warning: no 'Dynamic Notch Local Signing' certificate; signing ad-hoc (permissions reset each build)." >&2
+  echo "         run scripts/make-signing-cert.sh once to fix that." >&2
+  IDENTITY=-
+fi
+codesign --force --sign $IDENTITY $APP/Contents/Resources/MediaRemoteHelper.dylib
+codesign --force --sign $IDENTITY --identifier com.amirali.dynamicnotch.cli $APP/Contents/MacOS/notch
+codesign --force --sign $IDENTITY --identifier com.amirali.dynamicnotch $APP
 echo "Built $APP"
 
 if [[ ${1:-} == --install ]]; then
