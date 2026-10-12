@@ -1,0 +1,157 @@
+import AppKit
+
+/// Menu bar icon with settings, setup and demo actions.
+@MainActor
+final class StatusMenu: NSObject, NSMenuDelegate {
+    private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    private var actions: [ObjectIdentifier: () -> Void] = [:]
+
+    func install() {
+        if let button = item.button {
+            button.image = NSImage(systemSymbolName: "capsule.fill", accessibilityDescription: "Dynamic Notch")
+            button.image?.isTemplate = true
+        }
+        let menu = NSMenu()
+        menu.delegate = self
+        item.menu = menu
+    }
+
+    // Rebuilt on open so checkmarks reflect current state.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        actions.removeAll()
+        let settings = Settings.shared
+
+        let activities = NSMenu()
+        for (title, key) in [("Now Playing", Settings.Key.media),
+                             ("Timers", Settings.Key.timers),
+                             ("Clock app timers", Settings.Key.clockTimers),
+                             ("Claude Code", Settings.Key.claude),
+                             ("Terminal commands", Settings.Key.terminal),
+                             ("Charging & battery", Settings.Key.battery),
+                             ("Bluetooth devices", Settings.Key.bluetooth)] {
+            activities.addItem(toggle(title, settings.bool(key)) { settings.set(key, !settings.bool(key)) })
+        }
+        let activitiesItem = NSMenuItem(title: "Activities", action: nil, keyEquivalent: "")
+        activitiesItem.submenu = activities
+        menu.addItem(activitiesItem)
+
+        menu.addItem(toggle("Pop-up banners", settings.bannersEnabled) {
+            settings.set(Settings.Key.banners, !settings.bannersEnabled)
+        })
+        menu.addItem(toggle("Expand on hover", settings.hoverToExpand) {
+            settings.set(Settings.Key.hoverToExpand, !settings.hoverToExpand)
+        })
+        let delays = NSMenu()
+        for (title, value) in [("Instant", 0.0), ("Short", 0.15), ("Long", 0.5)] {
+            delays.addItem(toggle(title, abs(settings.hoverDelay - value) < 0.01) {
+                settings.set(Settings.Key.hoverDelay, value)
+            })
+        }
+        let delayItem = NSMenuItem(title: "Hover delay", action: nil, keyEquivalent: "")
+        delayItem.submenu = delays
+        menu.addItem(delayItem)
+
+        let thresholds = NSMenu()
+        for seconds in [5.0, 10, 30, 60] {
+            thresholds.addItem(toggle("\(Int(seconds)) seconds", settings.terminalThreshold == seconds) {
+                settings.set(Settings.Key.terminalThreshold, seconds)
+            })
+        }
+        let thresholdItem = NSMenuItem(title: "Show commands longer than", action: nil, keyEquivalent: "")
+        thresholdItem.submenu = thresholds
+        menu.addItem(thresholdItem)
+
+        menu.addItem(.separator())
+        menu.addItem(action(Installer.claudeHooksInstalled ? "Reinstall Claude Code hooks" : "Install Claude Code hooks…") {
+            Installer.installClaudeHooks()
+        })
+        menu.addItem(action(Installer.shellHookInstalled ? "Update shell integration" : "Install shell integration (zsh)") {
+            Installer.installShellHook()
+        })
+        menu.addItem(action("Install `notch` command…") { Installer.installCLI() })
+        menu.addItem(toggle("Launch at login", Installer.launchesAtLogin) {
+            Installer.setLaunchAtLogin(!Installer.launchesAtLogin)
+        })
+
+        if settings.bool(Settings.Key.clockTimers) {
+            if ClockTimerWatcher.shared.needsAccess {
+                menu.addItem(action("Allow Full Disk Access for Clock timers…") {
+                    ClockTimerWatcher.openFullDiskAccessSettings()
+                })
+            } else if let status = ClockTimerWatcher.shared.status {
+                let info = NSMenuItem(title: "Clock timers: \(status)", action: nil, keyEquivalent: "")
+                info.isEnabled = false
+                menu.addItem(info)
+            }
+        }
+
+        menu.addItem(.separator())
+        let demo = NSMenu()
+        demo.addItem(action("1-minute timer") { TimerStore.shared.start(duration: 60, label: "Demo timer") })
+        demo.addItem(action("10-second timer") { TimerStore.shared.start(duration: 10) })
+        demo.addItem(action("Claude Code session") { Demo.claude() })
+        demo.addItem(action("Finished command") { Demo.terminal() })
+        demo.addItem(action("Banner") {
+            NotchModel.shared.show(Banner(icon: .symbol("sparkles"), tint: .yellow, title: "Hello from the notch",
+                                          subtitle: "This is a banner", duration: 3))
+        })
+        let demoItem = NSMenuItem(title: "Try it", action: nil, keyEquivalent: "")
+        demoItem.submenu = demo
+        menu.addItem(demoItem)
+
+        menu.addItem(.separator())
+        menu.addItem(action("Quit Dynamic Notch") { NSApp.terminate(nil) })
+    }
+
+    private func action(_ title: String, _ handler: @escaping () -> Void) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: #selector(run(_:)), keyEquivalent: "")
+        item.target = self
+        actions[ObjectIdentifier(item)] = handler
+        return item
+    }
+
+    private func toggle(_ title: String, _ on: Bool, _ handler: @escaping () -> Void) -> NSMenuItem {
+        let item = action(title, handler)
+        item.state = on ? .on : .off
+        return item
+    }
+
+    @objc private func run(_ sender: NSMenuItem) {
+        actions[ObjectIdentifier(sender)]?()
+    }
+}
+
+/// Fake events for trying the notch without setting anything up.
+@MainActor
+enum Demo {
+    static func claude() {
+        let session = "demo-\(Int.random(in: 1000...9999))"
+        let base: [String: Any] = ["kind": "claude", "session": session, "cwd": NSHomeDirectory() + "/demo-project"]
+        let steps: [(Double, [String: Any])] = [
+            (0, ["event": "UserPromptSubmit"]),
+            (2, ["event": "PreToolUse", "tool": "Bash"]),
+            (5, ["event": "Notification", "notificationType": "permission_prompt",
+                 "message": "Claude needs your permission to use Bash"]),
+            (10, ["event": "PostToolUse", "tool": "Bash"]),
+            (14, ["event": "Stop"]),
+        ]
+        for (delay, step) in steps {
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(delay))
+                MessageRouter.handle(base.merging(step) { $1 })
+            }
+        }
+    }
+
+    static func terminal() {
+        let id = "demo-\(UUID().uuidString)"
+        TerminalStore.shared.handle(["kind": "terminal", "event": "start", "id": id, "command": "npm run build",
+                                     "hostBundle": "com.apple.Terminal"])
+        Task { @MainActor in
+            // Pretend it started long ago so it counts as long-running.
+            try? await Task.sleep(for: .seconds(0.5))
+            TerminalStore.shared.finishDemo(id: id)
+        }
+    }
+}
