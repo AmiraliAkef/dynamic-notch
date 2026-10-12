@@ -36,6 +36,9 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         activitiesItem.submenu = activities
         menu.addItem(activitiesItem)
 
+        menu.addItem(toggle("Show two activities side by side", settings.bool(Settings.Key.splitActivities)) {
+            settings.set(Settings.Key.splitActivities, !settings.bool(Settings.Key.splitActivities))
+        })
         menu.addItem(toggle("Sync equalizer to audio", settings.bool(Settings.Key.liveVisualizer)) {
             settings.set(Settings.Key.liveVisualizer, !settings.bool(Settings.Key.liveVisualizer))
         })

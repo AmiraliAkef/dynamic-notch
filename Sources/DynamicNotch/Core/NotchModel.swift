@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum NotchMode: Equatable {
-    case idle, compact, banner, expanded
+    case idle, compact, split, banner, expanded
 }
 
 /// Central state: which activities exist, which banner is up, and whether the
@@ -24,10 +24,13 @@ final class NotchModel: ObservableObject {
     private var bannerTask: Task<Void, Never>?
 
     var primary: Activity? { activities.first }
+    /// The second activity, shown in its own bubble on the right in split mode.
+    var secondary: Activity? { activities.count > 1 ? activities[1] : nil }
 
     var mode: NotchMode {
         if isExpanded { return .expanded }
         if banner != nil { return .banner }
+        if secondary != nil, Settings.shared.bool(Settings.Key.splitActivities) { return .split }
         if primary != nil { return .compact }
         return .idle
     }
@@ -117,6 +120,29 @@ final class NotchModel: ObservableObject {
 
     // MARK: Sizes
 
+    /// Horizontal offset of the main shape from the notch center. In split mode
+    /// it grows to the left only.
+    func mainOffset(for mode: NotchMode) -> CGFloat {
+        mode == .split ? -Layout.minimalWidth / 2 : 0
+    }
+
+    /// Center of the split-mode bubble, relative to the notch center.
+    var bubbleOffset: CGFloat {
+        let ears = NotchMode.split.topRadius
+        return geometry.notchSize.width / 2 + ears + Layout.bubbleGap + (Layout.minimalWidth + 2 * ears) / 2
+    }
+
+    /// The span the pointer counts as "on the notch", relative to the notch center.
+    func hotSpan(for mode: NotchMode) -> ClosedRange<CGFloat> {
+        let ears = mode.topRadius
+        if mode == .split {
+            let half = geometry.notchSize.width / 2
+            return (-half - Layout.minimalWidth - ears)...(bubbleOffset + Layout.minimalWidth / 2 + ears)
+        }
+        let half = size(for: mode).width / 2 + ears
+        return -half...half
+    }
+
     /// Size of the black shape for the current mode, in points.
     var shapeSize: CGSize { size(for: mode) }
 
@@ -127,6 +153,9 @@ final class NotchModel: ObservableObject {
             return notch
         case .compact:
             return CGSize(width: notch.width + 2 * Layout.compactSide, height: notch.height)
+        case .split:
+            // Only the left wing; the right side is the separate bubble.
+            return CGSize(width: notch.width + Layout.minimalWidth, height: notch.height)
         case .banner:
             return CGSize(width: max(notch.width + 2 * Layout.compactSide, Layout.bannerWidth),
                           height: notch.height + Layout.bannerExtra)
@@ -139,6 +168,9 @@ final class NotchModel: ObservableObject {
 
 enum Layout {
     static let compactSide: CGFloat = 52
+    /// Width of one activity in split mode (left wing or right bubble).
+    static let minimalWidth: CGFloat = 76
+    static let bubbleGap: CGFloat = 8
     static let bannerWidth: CGFloat = 400
     static let bannerExtra: CGFloat = 50
     static let expandedWidth: CGFloat = 540

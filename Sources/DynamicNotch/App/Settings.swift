@@ -21,6 +21,7 @@ final class Settings: ObservableObject {
             Key.bluetooth: true,
             Key.terminalThreshold: 10.0,
             Key.liveVisualizer: true,
+            Key.splitActivities: true,
         ])
     }
 
@@ -37,6 +38,7 @@ final class Settings: ObservableObject {
         static let bluetooth = "activity.bluetooth"
         static let terminalThreshold = "terminalThreshold"
         static let liveVisualizer = "liveVisualizer"
+        static let splitActivities = "splitActivities"
     }
 
     func bool(_ key: String) -> Bool { defaults.bool(forKey: key) }

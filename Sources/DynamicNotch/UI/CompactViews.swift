@@ -1,23 +1,33 @@
 import SwiftUI
 
-/// Places content on either side of the camera notch.
+/// Places content on either side of the camera notch — or, when `notchWidth`
+/// is nil, side by side in one small "minimal" slot (split mode, where two
+/// activities share the notch like on iPhone).
 struct CompactLayout<Leading: View, Trailing: View>: View {
-    var notchWidth: CGFloat
+    var notchWidth: CGFloat?
     @ViewBuilder var leading: Leading
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack(spacing: 0) {
-            leading.frame(width: Layout.compactSide - 6, alignment: .center).padding(.leading, 6)
-            Color.clear.frame(width: notchWidth)
-            trailing.frame(width: Layout.compactSide - 6, alignment: .center).padding(.trailing, 6)
+        if let notchWidth {
+            HStack(spacing: 0) {
+                leading.frame(width: Layout.compactSide - 6, alignment: .center).padding(.leading, 6)
+                Color.clear.frame(width: notchWidth)
+                trailing.frame(width: Layout.compactSide - 6, alignment: .center).padding(.trailing, 6)
+            }
+        } else {
+            HStack(spacing: 6) {
+                leading
+                trailing.frame(maxWidth: 40)
+            }
+            .frame(width: Layout.minimalWidth)
         }
     }
 }
 
 struct CompactView: View {
     var activity: Activity
-    var notchWidth: CGFloat
+    var notchWidth: CGFloat?
 
     var body: some View {
         switch activity.source {
@@ -34,7 +44,7 @@ struct CompactView: View {
 private let compactFont = Font.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit()
 
 struct MediaCompact: View {
-    var notchWidth: CGFloat
+    var notchWidth: CGFloat?
     @ObservedObject private var store = NowPlayingStore.shared
 
     var body: some View {
@@ -56,7 +66,7 @@ struct MediaCompact: View {
 
 struct TimerCompact: View {
     var id: UUID
-    var notchWidth: CGFloat
+    var notchWidth: CGFloat?
     @ObservedObject private var store = TimerStore.shared
 
     var body: some View {
@@ -81,7 +91,7 @@ struct TimerCompact: View {
 }
 
 struct StopwatchCompact: View {
-    var notchWidth: CGFloat
+    var notchWidth: CGFloat?
     @ObservedObject private var store = TimerStore.shared
 
     var body: some View {
@@ -100,7 +110,7 @@ struct StopwatchCompact: View {
 
 struct ClockTimerCompact: View {
     var id: String
-    var notchWidth: CGFloat
+    var notchWidth: CGFloat?
     @ObservedObject private var store = ClockTimerWatcher.shared
 
     var body: some View {
@@ -125,7 +135,7 @@ struct ClockTimerCompact: View {
 
 struct ClaudeCompact: View {
     var id: String
-    var notchWidth: CGFloat
+    var notchWidth: CGFloat?
     @ObservedObject private var store = ClaudeStore.shared
 
     var body: some View {
@@ -148,7 +158,7 @@ struct ClaudeCompact: View {
 
 struct TerminalCompact: View {
     var id: String
-    var notchWidth: CGFloat
+    var notchWidth: CGFloat?
     @ObservedObject private var store = TerminalStore.shared
 
     var body: some View {

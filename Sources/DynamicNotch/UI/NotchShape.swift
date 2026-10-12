@@ -36,7 +36,7 @@ struct NotchShape: Shape {
 extension NotchMode {
     var topRadius: CGFloat {
         switch self {
-        case .idle, .compact: 6
+        case .idle, .compact, .split: 6
         case .banner: 10
         case .expanded: 14
         }
@@ -45,7 +45,7 @@ extension NotchMode {
     var bottomRadius: CGFloat {
         switch self {
         case .idle: 10
-        case .compact: 12
+        case .compact, .split: 12
         case .banner: 22
         case .expanded: 30
         }

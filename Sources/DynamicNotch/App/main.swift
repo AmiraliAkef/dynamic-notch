@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -44,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch key {
         case Settings.Key.media:
             on ? NowPlayingStore.shared.start() : NowPlayingStore.shared.stop()
+        case Settings.Key.splitActivities:
+            withAnimation(NotchAnimation.morph) { NotchModel.shared.objectWillChange.send() }
         case Settings.Key.liveVisualizer:
             let info = NowPlayingStore.shared.info
             on ? AudioVisualizer.shared.update(playing: info.isPlaying, bundleID: info.bundleID)

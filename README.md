@@ -6,6 +6,7 @@ A Dynamic Island for the MacBook notch. It lives around the camera notch and sho
 - **Claude Code**: shows when Claude is working, needs your permission or input, or has finished, for each session. Click to jump to the terminal it's running in.
 - **Terminal**: commands that run longer than 10s show while they run, then show a ✓ or ✗ banner when they finish.
 - **Timers**: built-in timers and a stopwatch, plus timers running in **Clock.app**.
+- **Two at once**: like the iPhone, a second activity gets its own bubble to the right of the notch while the main one stays on the left wing. Click either side to open it.
 - **System**: charger plugged in or unplugged, low battery, Bluetooth devices (AirPods…) connecting.
 
 ## Build & install

@@ -102,19 +102,20 @@ final class NotchWindowController {
     /// Screen rect the pointer must be in to count as "on the notch".
     private func hotRect() -> NSRect {
         let g = model.geometry
-        var size = model.shapeSize
-        size.width += 2 * model.mode.topRadius
-        if model.mode == .idle {
+        let mode = model.mode
+        var span = model.hotSpan(for: mode)
+        var height = model.shapeSize.height
+        if mode == .idle {
             // Make the idle notch a slightly bigger target.
-            size.width += 16
-            size.height += 4
+            span = (span.lowerBound - 8)...(span.upperBound + 8)
+            height += 4
         }
         // A little slack below so the expanded panel doesn't close at the edge.
-        let slack: CGFloat = model.mode == .expanded ? 8 : 0
-        return NSRect(x: g.centerX - size.width / 2,
-                      y: g.top - size.height - slack,
-                      width: size.width,
-                      height: size.height + slack)
+        let slack: CGFloat = mode == .expanded ? 8 : 0
+        return NSRect(x: g.centerX + span.lowerBound,
+                      y: g.top - height - slack,
+                      width: span.upperBound - span.lowerBound,
+                      height: height + slack)
     }
 
     private func pointerMoved() {
