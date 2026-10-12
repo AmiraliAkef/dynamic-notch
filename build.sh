@@ -34,6 +34,7 @@ cat > $APP/Contents/Info.plist <<PLIST
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
+  <key>NSAudioCaptureUsageDescription</key><string>Dynamic Notch listens to the music that's playing so the equalizer moves with it. Audio is analyzed on your Mac and never recorded or stored.</string>
   <key>NSBluetoothAlwaysUsageDescription</key><string>Dynamic Notch shows when Bluetooth devices like AirPods connect.</string>
 </dict>
 </plist>

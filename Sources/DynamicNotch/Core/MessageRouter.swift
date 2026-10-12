@@ -45,6 +45,10 @@ enum MessageRouter {
                 "clockStatus": ClockTimerWatcher.shared.status ?? "ok",
                 "clockTimers": ClockTimerWatcher.shared.timers.map { "\($0.id) \($0.remaining())" },
                 "clockEnabled": Settings.shared.bool(Settings.Key.clockTimers),
+                "mediaPlaying": NowPlayingStore.shared.info.isPlaying,
+                "mediaBundle": NowPlayingStore.shared.info.bundleID ?? "none",
+                "audioLevels": AudioVisualizer.shared.levels.current(count: LevelStore.bandCount)?
+                    .map { (Double($0) * 100).rounded() / 100 } ?? "not live",
             ]
             try? JSONSerialization.data(withJSONObject: dump, options: .prettyPrinted).write(to: URL(fileURLWithPath: path))
         case "state":

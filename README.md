@@ -2,7 +2,7 @@
 
 A Dynamic Island for the MacBook notch. It lives around the camera notch and shows live activities:
 
-- **Now Playing**: album art and a waveform. Hover to get controls and a seek bar. Works with Music, Spotify, browsers and anything else that reports to macOS Now Playing.
+- **Now Playing**: album art and equalizer bars driven by the audio that's actually playing (a Core Audio tap plus an FFT). Hover to get controls and a seek bar. Works with Music, Spotify, browsers and anything else that reports to macOS Now Playing.
 - **Claude Code**: shows when Claude is working, needs your permission or input, or has finished, for each session. Click to jump to the terminal it's running in.
 - **Terminal**: commands that run longer than 10s show while they run, then show a ✓ or ✗ banner when they finish.
 - **Timers**: built-in timers and a stopwatch, plus timers running in **Clock.app**.
@@ -20,6 +20,7 @@ Requires Xcode 16+ (Swift 6) on macOS 14+. Then, from the menu bar icon:
 - **Install Claude Code hooks** adds a hook to each event in `~/.claude/settings.json` (a backup is saved next to it).
 - **Install shell integration (zsh)** adds one `source` line to `~/.zshrc`.
 - **Install `notch` command** symlinks the CLI into `/usr/local/bin` or `~/.local/bin`.
+- **Live equalizer** needs the System Audio Recording permission (macOS asks the first time). The audio is analyzed in memory and never recorded. Turn it off in the menu with *Sync equalizer to audio*.
 - **Clock app timers** need Full Disk Access (System Settings › Privacy & Security › Full Disk Access › Dynamic Notch). Without it, macOS blocks reading Clock's data.
 
 ## CLI
@@ -39,6 +40,7 @@ notch notify "Deploy finished" "api-server" --icon checkmark.circle.fill
 | Activity priorities, banners, idle → compact → banner → expanded | `Core/NotchModel.swift` |
 | Unix socket (`~/Library/Application Support/DynamicNotch/notch.sock`, JSON lines) | `Core/SocketServer.swift` |
 | Now Playing. MediaRemote only answers Apple-signed processes since macOS 15.4, so `Helper/MediaRemoteHelper.m` is loaded into `/usr/bin/perl` | `Activities/NowPlaying.swift` |
+| Live equalizer. Taps the Now Playing app's audio processes (falls back to all system audio), FFTs it into 6 log-spaced bands with adaptive gain, and delays the result by the output latency so the bars match what you hear | `Activities/AudioVisualizer.swift` |
 | Clock.app timers, read from mobiletimerd's Core Data store (`ZMTCDTIMER`; state 2 = paused, 3 = running; end date archived as `MTTimerDate`) | `Activities/ClockAppTimers.swift` |
 | zsh hook using `zsh/net/socket`, so it adds no extra process per command | `hooks/notch.zsh` |
 

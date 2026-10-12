@@ -20,6 +20,7 @@ final class Settings: ObservableObject {
             Key.battery: true,
             Key.bluetooth: true,
             Key.terminalThreshold: 10.0,
+            Key.liveVisualizer: true,
         ])
     }
 
@@ -35,6 +36,7 @@ final class Settings: ObservableObject {
         static let battery = "activity.battery"
         static let bluetooth = "activity.bluetooth"
         static let terminalThreshold = "terminalThreshold"
+        static let liveVisualizer = "liveVisualizer"
     }
 
     func bool(_ key: String) -> Bool { defaults.bool(forKey: key) }

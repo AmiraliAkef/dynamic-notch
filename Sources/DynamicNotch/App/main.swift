@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         server?.stop()
         NowPlayingStore.shared.stop()
+        AudioVisualizer.shared.stop()
     }
 
     private static func settingChanged(_ key: String?) {
@@ -43,6 +44,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch key {
         case Settings.Key.media:
             on ? NowPlayingStore.shared.start() : NowPlayingStore.shared.stop()
+        case Settings.Key.liveVisualizer:
+            let info = NowPlayingStore.shared.info
+            on ? AudioVisualizer.shared.update(playing: info.isPlaying, bundleID: info.bundleID)
+               : AudioVisualizer.shared.stop()
         case Settings.Key.clockTimers:
             on ? ClockTimerWatcher.shared.start() : ClockTimerWatcher.shared.stop()
         case Settings.Key.claude where !on:

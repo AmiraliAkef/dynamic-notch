@@ -96,6 +96,7 @@ final class NowPlayingStore: ObservableObject {
         process?.terminate()
         info = NowPlaying()
         model.remove(.media)
+        AudioVisualizer.shared.stop()
     }
 
     private func helperExited() {
@@ -183,6 +184,7 @@ final class NowPlayingStore: ObservableObject {
     }
 
     private func sync() {
+        AudioVisualizer.shared.update(playing: info.hasContent && info.isPlaying, bundleID: info.bundleID)
         hideTask?.cancel()
         if info.hasContent && info.isPlaying {
             model.upsert(Activity(source: .media, priority: Priority.media))
