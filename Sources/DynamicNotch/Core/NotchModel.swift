@@ -59,6 +59,12 @@ final class NotchModel: ObservableObject {
 
     func show(_ banner: Banner) {
         guard Settings.shared.bannersEnabled else { return }
+        // Drop exact repeats of a banner that is already showing or queued.
+        let isDuplicate: (Banner) -> Bool = {
+            $0.title == banner.title && $0.subtitle == banner.subtitle && $0.trailing == banner.trailing
+        }
+        if let current = self.banner, isDuplicate(current) { return }
+        if bannerQueue.contains(where: isDuplicate) { return }
         if self.banner == nil {
             present(banner)
         } else {

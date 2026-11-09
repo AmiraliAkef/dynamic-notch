@@ -88,12 +88,26 @@ final class BatteryMonitor: ObservableObject {
 }
 
 /// Bluetooth device connected/disconnected banners (AirPods, keyboards…).
+///
+/// IOBluetooth reports a connect for every profile/channel a device opens, and
+/// phones/Macs open short-lived links for Handoff & Continuity. So events are
+/// keyed by address, debounced until the state settles, and only announced
+/// when the settled state differs from the last one we announced.
 @MainActor
 final class BluetoothMonitor: NSObject {
     static let shared = BluetoothMonitor()
 
     private var connectNotification: IOBluetoothUserNotification?
     private var startedAt = Date.distantFuture
+    /// Addresses we hold a disconnect observer for (one per device).
+    private var observed: [String: IOBluetoothUserNotification] = [:]
+    /// Last state announced (or silently recorded) per address.
+    private var announced: [String: Bool] = [:]
+    private var lastAnnouncedAt: [String: Date] = [:]
+    private var pending: [String: Task<Void, Never>] = [:]
+
+    private let settleDelay: Duration = .seconds(2)
+    private let cooldown: TimeInterval = 10
 
     func start() {
         guard connectNotification == nil else { return }
@@ -103,15 +117,61 @@ final class BluetoothMonitor: NSObject {
     }
 
     @objc private func connected(_ notification: IOBluetoothUserNotification, device: IOBluetoothDevice) {
-        device.register(forDisconnectNotification: self, selector: #selector(disconnected(_:device:)))
-        // Registering reports devices that were already connected; skip those.
-        guard Date.now.timeIntervalSince(startedAt) > 3 else { return }
-        announce(device, connected: true)
+        guard let address = device.addressString else { return }
+        if observed[address] == nil {
+            observed[address] = device.register(forDisconnectNotification: self,
+                                                selector: #selector(disconnected(_:device:)))
+        }
+        // Registering reports devices that were already connected; record them silently.
+        if Date.now.timeIntervalSince(startedAt) <= 3 {
+            announced[address] = true
+            return
+        }
+        schedule(device, address: address)
     }
 
     @objc private func disconnected(_ notification: IOBluetoothUserNotification, device: IOBluetoothDevice) {
         notification.unregister()
-        announce(device, connected: false)
+        guard let address = device.addressString else { return }
+        if observed[address] === notification { observed[address] = nil }
+        schedule(device, address: address)
+    }
+
+    /// Waits for the connection to settle, then announces only a real change.
+    private func schedule(_ device: IOBluetoothDevice, address: String) {
+        pending[address]?.cancel()
+        pending[address] = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: self.settleDelay)
+            guard !Task.isCancelled else { return }
+            self.pending[address] = nil
+
+            let isConnected = device.isConnected()
+            if !isConnected, let note = self.observed.removeValue(forKey: address) {
+                note.unregister()
+            }
+            guard self.announced[address] != isConnected else { return }
+            self.announced[address] = isConnected
+
+            guard self.isAnnounceable(device) else { return }
+            if let last = self.lastAnnouncedAt[address], Date.now.timeIntervalSince(last) < self.cooldown {
+                return
+            }
+            self.lastAnnouncedAt[address] = .now
+            self.announce(device, connected: isConnected)
+        }
+    }
+
+    /// Accessories only — phones and computers connect in the background for
+    /// Continuity/Handoff/Instant Hotspot, which isn't something to announce.
+    private func isAnnounceable(_ device: IOBluetoothDevice) -> Bool {
+        guard device.isPaired() else { return false }
+        switch device.deviceClassMajor {
+        case UInt32(kBluetoothDeviceClassMajorPhone), UInt32(kBluetoothDeviceClassMajorComputer):
+            return false
+        default:
+            return true
+        }
     }
 
     private func announce(_ device: IOBluetoothDevice, connected: Bool) {
