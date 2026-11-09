@@ -46,3 +46,7 @@ notch notify "Deploy finished" "api-server" --icon checkmark.circle.fill
 | zsh hook using `zsh/net/socket`, so it adds no extra process per command | `hooks/notch.zsh` |
 
 The Now Playing and Clock integrations use undocumented system internals, so a future macOS update may break them. Each one fails on its own without affecting the rest of the app.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
