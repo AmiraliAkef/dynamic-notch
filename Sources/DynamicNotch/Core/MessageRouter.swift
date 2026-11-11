@@ -13,6 +13,12 @@ enum MessageRouter {
             ClaudeStore.shared.handle(message)
         case "terminal":
             TerminalStore.shared.handle(message)
+        case "terminal-quit":
+            // `notch send '{"kind":"terminal-quit","pid":123}'`
+            if let pid = message["pid"] as? Int,
+               let session = TerminalStore.shared.sessions.first(where: { $0.pid == Int32(pid) }) {
+                TerminalStore.shared.quit(session)
+            }
         case "timer":
             guard Settings.shared.bool(Settings.Key.timers) else { return }
             TimerStore.shared.handle(action: message["action"] as? String ?? "", message: message)

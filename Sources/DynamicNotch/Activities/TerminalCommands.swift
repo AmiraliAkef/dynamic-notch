@@ -17,6 +17,8 @@ struct TerminalSession: Identifiable, Equatable {
     var start: Date
     var cwd: String?
     var hostBundle: String?
+    /// e.g. /dev/ttys003, used to find the shell's terminal tab.
+    var tty: String?
     var current: RunningCommand?
     var commandCount = 0
     var lastCommand: String?
@@ -72,6 +74,7 @@ final class TerminalStore: ObservableObject {
             ?? TerminalSession(id: String(pid), pid: pid, start: Self.born(from: message) ?? .now)
         if let cwd = message["cwd"] as? String { session.cwd = cwd }
         if let bundle = message["hostBundle"] as? String { session.hostBundle = bundle }
+        if let tty = message["tty"] as? String { session.tty = tty }
         if message["quit"] as? String == "usr1" { session.quitsOnUSR1 = true }
 
         switch event {
@@ -97,8 +100,8 @@ final class TerminalStore: ObservableObject {
         sync()
     }
 
-    /// Closes the shell. Whatever runs in it (a build, vim, ssh…) is hung up
-    /// first so the shell isn't stuck waiting on it.
+    /// Closes the shell and its terminal tab. Whatever runs in it (a build,
+    /// vim, ssh…) is hung up first so the shell isn't stuck waiting on it.
     func quit(_ session: TerminalSession) {
         let shellGroup = getpgid(session.pid)
         for child in Self.childPids(of: session.pid) {
@@ -117,8 +120,23 @@ final class TerminalStore: ObservableObject {
         } else {
             kill(pid, SIGHUP)
         }
+        if let tty = session.tty {
+            closeWindow(tty: tty, hostBundle: session.hostBundle, once: pid)
+        }
         sessions.removeAll { $0.id == session.id }
         sync()
+    }
+
+    /// Closes the tab once the shell is gone, so the terminal doesn't ask
+    /// whether to terminate it. Gives up waiting after 3 seconds.
+    private func closeWindow(tty: String, hostBundle: String?, once pid: Int32, waited: TimeInterval = 0) {
+        if kill(pid, 0) != 0 || waited >= 3 {
+            TerminalWindowCloser.close(tty: tty, hostBundle: hostBundle)
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            self.closeWindow(tty: tty, hostBundle: hostBundle, once: pid, waited: waited + 0.15)
+        }
     }
 
     func open(_ session: TerminalSession) {

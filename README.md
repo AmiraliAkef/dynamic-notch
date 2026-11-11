@@ -4,7 +4,7 @@ A Dynamic Island for the MacBook notch. It lives around the camera notch and sho
 
 - **Now Playing**: album art and equalizer bars driven by the audio that's actually playing (a Core Audio tap plus an FFT). Hover to get controls and a seek bar. Works with Music, Spotify, browsers and anything else that reports to macOS Now Playing.
 - **Claude Code**: shows when Claude is working, needs your permission or input, or has finished, for each session. Click to jump to the terminal it's running in.
-- **Terminal**: each open zsh session is listed with how long it's been open, what it's running, and a button to quit it. Commands that run longer than 10s also show in the notch while they run, then show a ✓ or ✗ banner when they finish.
+- **Terminal**: each open zsh session is listed with how long it's been open, what it's running, and a button to quit it (which also closes its Terminal or iTerm2 tab). Commands that run longer than 10s also show in the notch while they run, then show a ✓ or ✗ banner when they finish.
 - **Timers**: built-in timers and a stopwatch, plus timers running in **Clock.app**.
 - **Two at once**: like the iPhone, a second activity gets its own bubble to the right of the notch while the main one stays on the left wing. Click either side to open it.
 - **System**: charger plugged in or unplugged, low battery, Bluetooth devices (AirPods…) connecting.

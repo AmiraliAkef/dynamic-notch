@@ -41,7 +41,7 @@ _notch_send() {
 _notch_base() {
   local cwd
   _notch_escape "$PWD"; cwd=$REPLY
-  REPLY="\"kind\":\"terminal\",\"pid\":$$,\"born\":$_notch_born,\"quit\":\"usr1\",\"cwd\":\"$cwd\",\"hostBundle\":\"${__CFBundleIdentifier}\""
+  REPLY="\"kind\":\"terminal\",\"pid\":$$,\"born\":$_notch_born,\"quit\":\"usr1\",\"tty\":\"$TTY\",\"cwd\":\"$cwd\",\"hostBundle\":\"${__CFBundleIdentifier}\""
 }
 
 _notch_preexec() {
