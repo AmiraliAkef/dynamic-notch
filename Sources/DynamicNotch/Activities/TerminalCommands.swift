@@ -1,102 +1,162 @@
 import AppKit
+import Darwin
 import SwiftUI
 
-struct TerminalCommand: Identifiable, Equatable {
-    let id: String
+/// A command running in a terminal session.
+struct RunningCommand: Equatable {
     var command: String
-    var cwd: String?
     var start: Date
-    var pid: Int32?
-    var hostBundle: String?
-    var end: Date?
-    var exitCode: Int?
-
-    var duration: TimeInterval { (end ?? .now).timeIntervalSince(start) }
-    var succeeded: Bool { exitCode == 0 }
+    var duration: TimeInterval { Date.now.timeIntervalSince(start) }
 }
 
-/// Long-running shell commands, reported by the zsh hook (hooks/notch.zsh).
+/// One interactive zsh, from the moment it starts until it exits.
+struct TerminalSession: Identifiable, Equatable {
+    /// The shell's pid, as a string so it can name an activity.
+    let id: String
+    let pid: Int32
+    var start: Date
+    var cwd: String?
+    var hostBundle: String?
+    var current: RunningCommand?
+    var commandCount = 0
+    var lastCommand: String?
+    var lastExit: Int?
+    /// Newer hooks exit cleanly on SIGUSR1, so the terminal can close the window.
+    var quitsOnUSR1 = false
+
+    var duration: TimeInterval { Date.now.timeIntervalSince(start) }
+
+    /// Folder the shell is in, like "dynamic_notch" or "~".
+    var title: String {
+        guard let cwd else { return "zsh" }
+        if cwd == NSHomeDirectory() { return "~" }
+        return (cwd as NSString).lastPathComponent
+    }
+}
+
+/// Terminal sessions, reported by the zsh hook (hooks/notch.zsh). Each shell is
+/// one entry; a command that runs past the threshold also shows in the compact
+/// notch and pops a banner when it finishes.
 @MainActor
 final class TerminalStore: ObservableObject {
     static let shared = TerminalStore()
 
-    @Published private(set) var running: [TerminalCommand] = []
-    @Published private(set) var recent: [TerminalCommand] = []
+    @Published private(set) var sessions: [TerminalSession] = []
     private var ticker: Timer?
 
     private var model: NotchModel { .shared }
     private var threshold: TimeInterval { Settings.shared.terminalThreshold }
 
-    /// Running commands old enough to be worth showing.
-    var visibleRunning: [TerminalCommand] {
-        running.filter { $0.duration >= threshold }
+    /// Newest first.
+    var orderedSessions: [TerminalSession] {
+        sessions.sorted { $0.start > $1.start }
+    }
+
+    /// Sessions whose current command has run long enough to be worth showing.
+    var longRunning: [TerminalSession] {
+        sessions.filter { ($0.current?.duration ?? 0) >= threshold }
     }
 
     func handle(_ message: [String: Any]) {
         guard Settings.shared.bool(Settings.Key.terminal) else { return }
-        guard let id = message["id"] as? String else { return }
+        guard let pid = Self.pid(from: message) else { return }
+        let event = message["event"] as? String
 
-        switch message["event"] as? String {
+        if event == "exit" {
+            sessions.removeAll { $0.pid == pid }
+            sync()
+            return
+        }
+
+        var session = sessions.first { $0.pid == pid }
+            ?? TerminalSession(id: String(pid), pid: pid, start: Self.born(from: message) ?? .now)
+        if let cwd = message["cwd"] as? String { session.cwd = cwd }
+        if let bundle = message["hostBundle"] as? String { session.hostBundle = bundle }
+        if message["quit"] as? String == "usr1" { session.quitsOnUSR1 = true }
+
+        switch event {
+        case "session":
+            break
         case "start":
-            let command = TerminalCommand(id: id,
-                                          command: message["command"] as? String ?? "",
-                                          cwd: message["cwd"] as? String,
-                                          start: .now,
-                                          pid: (message["pid"] as? Int).map(Int32.init),
-                                          hostBundle: message["hostBundle"] as? String)
-            running.removeAll { $0.id == id }
-            running.append(command)
-
+            session.current = RunningCommand(command: message["command"] as? String ?? "", start: .now)
         case "end":
-            guard var command = running.first(where: { $0.id == id }) else { return }
-            running.removeAll { $0.id == id }
-            command.end = .now
-            command.exitCode = message["exit"] as? Int ?? 0
-            if command.duration >= threshold { finished(command) }
-
+            if let command = session.current {
+                let exit = message["exit"] as? Int ?? 0
+                session.current = nil
+                session.commandCount += 1
+                session.lastCommand = command.command
+                session.lastExit = exit
+                if command.duration >= threshold { finished(command, exit: exit, in: session) }
+            }
         default:
             return
         }
+
+        sessions.removeAll { $0.pid == pid }
+        sessions.append(session)
         sync()
     }
 
-    private func finished(_ command: TerminalCommand) {
-        recent.insert(command, at: 0)
-        if recent.count > 20 { recent.removeLast(recent.count - 20) }
+    /// Closes the shell. Whatever runs in it (a build, vim, ssh…) is hung up
+    /// first so the shell isn't stuck waiting on it.
+    func quit(_ session: TerminalSession) {
+        let shellGroup = getpgid(session.pid)
+        for child in Self.childPids(of: session.pid) {
+            let group = getpgid(child)
+            kill(group > 1 && group != shellGroup ? -group : child, SIGHUP)
+        }
+        // zsh ignores SIGTERM; our hook traps USR1 and exits cleanly (so the
+        // terminal closes the tab), older hooks get a hangup instead.
+        let pid = session.pid
+        if session.quitsOnUSR1 {
+            kill(pid, SIGUSR1)
+            // A shell that didn't take the hint (stuck child, custom trap) gets hung up.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                if kill(pid, 0) == 0 { kill(pid, SIGHUP) }
+            }
+        } else {
+            kill(pid, SIGHUP)
+        }
+        sessions.removeAll { $0.id == session.id }
+        sync()
+    }
 
-        let ok = command.succeeded
+    func open(_ session: TerminalSession) {
+        activateApp(bundleID: session.hostBundle)
+    }
+
+    private func finished(_ command: RunningCommand, exit: Int, in session: TerminalSession) {
+        let ok = exit == 0
         model.show(Banner(icon: .symbol(ok ? "checkmark.circle.fill" : "xmark.circle.fill"),
                           tint: ok ? .green : .red,
                           title: shortCommand(command.command),
-                          subtitle: ok ? "Finished" : "Failed with exit code \(command.exitCode ?? -1)",
+                          subtitle: ok ? "Finished" : "Failed with exit code \(exit)",
                           trailing: formatDuration(command.duration),
                           duration: 5,
                           tab: .terminal,
-                          openBundle: command.hostBundle,
+                          openBundle: session.hostBundle,
                           shakes: !ok))
     }
 
-    /// Used by the "Try it" menu: ends a command as if it ran for 83 seconds.
-    func finishDemo(id: String) {
-        guard let index = running.firstIndex(where: { $0.id == id }) else { return }
-        running[index].start = .now - 83
-        handle(["id": id, "event": "end", "exit": 0])
-    }
-
-    func clearRecent() {
-        recent.removeAll()
+    /// Used by the "Try it" menu: ends a session's command as if it ran for 83 seconds.
+    func finishDemo(pid: Int32) {
+        guard let index = sessions.firstIndex(where: { $0.pid == pid }) else { return }
+        sessions[index].current?.start = .now - 83
+        handle(["event": "end", "pid": Int(pid), "exit": 0])
+        sessions.removeAll { $0.pid == pid }
+        sync()
     }
 
     private func sync() {
-        if !running.isEmpty, ticker == nil {
+        if !sessions.isEmpty, ticker == nil {
             ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
                 MainActor.assumeIsolated { TerminalStore.shared.tick() }
             }
-        } else if running.isEmpty {
+        } else if sessions.isEmpty {
             ticker?.invalidate()
             ticker = nil
         }
-        let visible = Set(visibleRunning.map(\.id))
+        let visible = Set(longRunning.map(\.id))
         model.removeAll { source in
             guard case .terminal(let id) = source else { return false }
             return !visible.contains(id)
@@ -107,12 +167,33 @@ final class TerminalStore: ObservableObject {
     }
 
     private func tick() {
-        // Shells that were closed mid-command never report an end.
-        running.removeAll { command in
-            guard let pid = command.pid else { return command.duration > 24 * 3600 }
-            return kill(pid, 0) != 0 && errno == ESRCH
-        }
+        // Shells killed without running zshexit (window closed, crash) never say goodbye.
+        sessions.removeAll { kill($0.pid, 0) != 0 && errno == ESRCH }
         sync()
+    }
+
+    /// The shell's pid. Older hooks only sent "<pid>-<random>" ids on "end".
+    private static func pid(from message: [String: Any]) -> Int32? {
+        if let pid = message["pid"] as? Int { return Int32(pid) }
+        if let id = message["id"] as? String, let pid = id.split(separator: "-").first.flatMap({ Int32($0) }) {
+            return pid
+        }
+        return nil
+    }
+
+    private static func born(from message: [String: Any]) -> Date? {
+        guard let seconds = message["born"] as? Double ?? (message["born"] as? Int).map(Double.init),
+              seconds > 0 else { return nil }
+        return Date(timeIntervalSince1970: seconds)
+    }
+
+    private static func childPids(of pid: Int32) -> [Int32] {
+        var buffer = [Int32](repeating: 0, count: 64)
+        let bytes = proc_listchildpids(pid, &buffer, Int32(buffer.count * MemoryLayout<Int32>.size))
+        guard bytes > 0 else { return [] }
+        // Returns a count of pids on current macOS, bytes on older releases.
+        let count = min(Int(bytes), buffer.count)
+        return buffer.prefix(count).filter { $0 > 0 }
     }
 }
 

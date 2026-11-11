@@ -8,7 +8,7 @@ struct ExpandedView: View {
     var tabs: [NotchTab] {
         var tabs: [NotchTab] = [.media, .timers]
         if !claude.sessions.isEmpty || model.selectedTab == .claude { tabs.append(.claude) }
-        if !terminal.running.isEmpty || !terminal.recent.isEmpty || model.selectedTab == .terminal { tabs.append(.terminal) }
+        if !terminal.sessions.isEmpty || model.selectedTab == .terminal { tabs.append(.terminal) }
         return tabs
     }
 
@@ -466,11 +466,11 @@ struct TerminalExpanded: View {
     @ObservedObject private var store = TerminalStore.shared
 
     var body: some View {
-        if store.running.isEmpty && store.recent.isEmpty {
-            EmptyState(symbol: "apple.terminal", title: "No long-running commands",
+        if store.sessions.isEmpty {
+            EmptyState(symbol: "apple.terminal", title: "No terminal sessions",
                        subtitle: Installer.shellHookInstalled
-                           ? "Commands over \(Int(Settings.shared.terminalThreshold))s show up here"
-                           : "Install the zsh hook to track commands") {
+                           ? "Open zsh sessions show up here"
+                           : "Install the zsh hook to track sessions") {
                 if !Installer.shellHookInstalled {
                     PillButton(title: "Install shell integration", tint: .green) { Installer.installShellHook() }
                 }
@@ -478,8 +478,7 @@ struct TerminalExpanded: View {
         } else {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 4) {
-                    ForEach(store.running) { TerminalRow(command: $0) }
-                    ForEach(store.recent) { TerminalRow(command: $0) }
+                    ForEach(store.orderedSessions) { TerminalRow(session: $0) }
                 }
             }
         }
@@ -487,44 +486,62 @@ struct TerminalExpanded: View {
 }
 
 private struct TerminalRow: View {
-    var command: TerminalCommand
+    var session: TerminalSession
     @State private var hovering = false
+    @State private var confirmingQuit = false
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             HStack(spacing: 10) {
                 Group {
-                    if command.end == nil {
+                    if session.current != nil {
                         ProgressView().controlSize(.small).tint(.green)
                     } else {
-                        Image(systemName: command.succeeded ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(command.succeeded ? .green : .red)
+                        Image(systemName: "apple.terminal.fill").foregroundStyle(.white.opacity(0.5))
                     }
                 }
                 .frame(width: 18)
-                Text(shortCommand(command.command))
-                    .font(.system(size: 12, design: .monospaced))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                Spacer()
-                if let end = command.end {
-                    Text(end, style: .relative)
-                        .font(.system(size: 10)).foregroundStyle(.white.opacity(0.4))
-                    Text(formatDuration(command.duration))
-                        .font(.system(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(.white.opacity(0.7))
-                } else {
-                    Text(formatElapsed(context.date.timeIntervalSince(command.start)))
-                        .font(.system(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(.green)
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Text(session.title).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.white)
+                        AppIcon(bundleID: session.hostBundle, size: 13)
+                    }
+                    Text(status(at: context.date))
+                        .font(.system(size: 11, design: session.current != nil ? .monospaced : .default))
+                        .foregroundStyle(session.current != nil ? .green : .white.opacity(0.5))
+                        .lineLimit(1)
                 }
-                AppIcon(bundleID: command.hostBundle, size: 14)
+                Spacer(minLength: 6)
+                Text(formatElapsed(context.date.timeIntervalSince(session.start)))
+                    .font(.system(size: 11, weight: .medium).monospacedDigit()).foregroundStyle(.white.opacity(0.7))
+                if confirmingQuit {
+                    PillButton(title: "Quit", tint: .red, filled: true) {
+                        TerminalStore.shared.quit(session)
+                    }
+                } else {
+                    NotchButton(symbol: "xmark", size: 9) { confirmingQuit = true }
+                        .opacity(hovering ? 1 : 0.35)
+                        .help("Quit this session")
+                }
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(hovering ? 0.1 : 0.04)))
             .contentShape(Rectangle())
-            .onTapGesture { activateApp(bundleID: command.hostBundle) }
-            .onHover { hovering = $0 }
+            .onTapGesture { TerminalStore.shared.open(session) }
+            .onHover { hovering = $0; if !$0 { confirmingQuit = false } }
+            .contextMenu {
+                Button("Quit session") { TerminalStore.shared.quit(session) }
+            }
         }
+    }
+
+    private func status(at date: Date) -> String {
+        if let current = session.current {
+            return "\(shortCommand(current.command)) · \(formatElapsed(date.timeIntervalSince(current.start)))"
+        }
+        let count = session.commandCount
+        return count == 0 ? "Idle" : "Idle · \(count) command\(count == 1 ? "" : "s")"
     }
 }
 

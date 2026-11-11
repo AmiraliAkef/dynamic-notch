@@ -151,13 +151,14 @@ enum Demo {
     }
 
     static func terminal() {
-        let id = "demo-\(UUID().uuidString)"
-        TerminalStore.shared.handle(["kind": "terminal", "event": "start", "id": id, "command": "npm run build",
+        // A pid no real shell will have, so the liveness check can't touch one.
+        let pid = Int32.max - Int32.random(in: 0..<1000)
+        TerminalStore.shared.handle(["kind": "terminal", "event": "start", "pid": Int(pid), "command": "npm run build",
                                      "hostBundle": "com.apple.Terminal"])
         Task { @MainActor in
             // Pretend it started long ago so it counts as long-running.
             try? await Task.sleep(for: .seconds(0.5))
-            TerminalStore.shared.finishDemo(id: id)
+            TerminalStore.shared.finishDemo(pid: pid)
         }
     }
 }

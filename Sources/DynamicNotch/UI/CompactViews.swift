@@ -162,7 +162,7 @@ struct TerminalCompact: View {
     @ObservedObject private var store = TerminalStore.shared
 
     var body: some View {
-        if let command = store.running.first(where: { $0.id == id }) {
+        if let command = store.sessions.first(where: { $0.id == id })?.current {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 CompactLayout(notchWidth: notchWidth) {
                     Image(systemName: "apple.terminal.fill")
