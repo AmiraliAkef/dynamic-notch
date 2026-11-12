@@ -78,12 +78,13 @@ private struct TabButton: View {
     }
 }
 
-/// Battery and clock in the top-right corner.
+/// Caffeinated mode toggle, battery and clock in the top-right corner.
 private struct StatusCluster: View {
     @ObservedObject private var battery = BatteryMonitor.shared
 
     var body: some View {
         HStack(spacing: 8) {
+            CaffeinateButton()
             if let state = battery.state {
                 HStack(spacing: 3) {
                     Text("\(state.percent)%").font(.system(size: 11, weight: .medium).monospacedDigit())
@@ -98,6 +99,29 @@ private struct StatusCluster: View {
                     .foregroundStyle(.white.opacity(0.75))
             }
         }
+    }
+}
+
+/// Keeps the Mac awake with the lid closed so agents keep working.
+private struct CaffeinateButton: View {
+    @ObservedObject private var caffeinate = CaffeinateController.shared
+    @State private var hovering = false
+
+    var body: some View {
+        Button { caffeinate.toggle() } label: {
+            Image(systemName: caffeinate.isOn ? "cup.and.saucer.fill" : "cup.and.saucer")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(caffeinate.isOn ? .orange : .white.opacity(hovering ? 0.8 : 0.5))
+                .frame(width: 26, height: 20)
+                .background(Capsule().fill(caffeinate.isOn ? .orange.opacity(0.2) : .white.opacity(hovering ? 0.08 : 0)))
+                .contentShape(Capsule())
+                .opacity(caffeinate.isBusy ? 0.5 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(caffeinate.isBusy)
+        .help(caffeinate.isOn ? "Caffeinated: stays awake with the lid closed. Click to turn off."
+                              : "Caffeinated mode: keep working with the lid closed")
+        .onHover { hovering = $0 }
     }
 }
 

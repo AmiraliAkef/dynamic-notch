@@ -28,6 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ClockTimerWatcher.shared.start()
         BatteryMonitor.shared.start()
         BluetoothMonitor.shared.start()
+        CaffeinateController.shared.start()
+        PhoneNotifier.shared.start()
 
         NotificationCenter.default.addObserver(forName: .settingsChanged, object: nil, queue: .main) { note in
             MainActor.assumeIsolated { Self.settingChanged(note.object as? String) }
@@ -35,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        CaffeinateController.shared.restoreOnQuit()
         server?.stop()
         NowPlayingStore.shared.stop()
         AudioVisualizer.shared.stop()

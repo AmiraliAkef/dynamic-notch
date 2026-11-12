@@ -1,19 +1,28 @@
 import AppKit
+import Combine
 
 /// Menu bar icon with settings, setup and demo actions.
 @MainActor
 final class StatusMenu: NSObject, NSMenuDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private var actions: [ObjectIdentifier: () -> Void] = [:]
+    private var subscriptions: Set<AnyCancellable> = []
 
     func install() {
-        if let button = item.button {
-            button.image = NSImage(systemSymbolName: "capsule.fill", accessibilityDescription: "Dynamic Notch")
-            button.image?.isTemplate = true
-        }
+        // A cup replaces the capsule while Caffeinated mode keeps the Mac awake.
+        CaffeinateController.shared.$isOn
+            .sink { [weak self] on in self?.setIcon(caffeinated: on) }
+            .store(in: &subscriptions)
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu
+    }
+
+    private func setIcon(caffeinated: Bool) {
+        guard let button = item.button else { return }
+        button.image = NSImage(systemSymbolName: caffeinated ? "cup.and.saucer.fill" : "capsule.fill",
+                               accessibilityDescription: caffeinated ? "Dynamic Notch (Caffeinated)" : "Dynamic Notch")
+        button.image?.isTemplate = true
     }
 
     // Rebuilt on open so checkmarks reflect current state.
@@ -69,6 +78,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         menu.addItem(thresholdItem)
 
         menu.addItem(.separator())
+        addCaffeinateItems(to: menu)
+        addPhoneItems(to: menu)
+
+        menu.addItem(.separator())
         menu.addItem(action(Installer.claudeHooksInstalled ? "Reinstall Claude Code hooks" : "Install Claude Code hooks…") {
             Installer.installClaudeHooks()
         })
@@ -108,6 +121,61 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(action("Quit Dynamic Notch") { NSApp.terminate(nil) })
+    }
+
+    private func addCaffeinateItems(to menu: NSMenu) {
+        let caffeinate = CaffeinateController.shared
+        let settings = Settings.shared
+        guard caffeinate.isSetUp else {
+            menu.addItem(action("Set up Caffeinated mode…") { caffeinate.setUp() })
+            return
+        }
+        var title = "Caffeinated mode (lid closed)"
+        if caffeinate.isOn, let until = caffeinate.until {
+            title += " · until \(until.formatted(date: .omitted, time: .shortened))"
+        }
+        menu.addItem(toggle(title, caffeinate.isOn) { caffeinate.toggle() })
+
+        let durations = NSMenu()
+        for (title, value) in [("Never (turn off myself)", CaffeinateController.indefinitely),
+                               ("When agents finish", CaffeinateController.untilAgentsFinish),
+                               ("After 1 hour", 3600.0), ("After 2 hours", 7200.0), ("After 4 hours", 14400.0)] {
+            durations.addItem(toggle(title, settings.caffeinateDuration == value) {
+                settings.set(Settings.Key.caffeinateDuration, value)
+            })
+        }
+        durations.addItem(.separator())
+        for percent in [10, 20, 30] {
+            durations.addItem(toggle("When battery is below \(percent)%", settings.caffeinateMinBattery == percent) {
+                settings.set(Settings.Key.caffeinateMinBattery, percent)
+            })
+        }
+        durations.addItem(.separator())
+        durations.addItem(action("Remove Caffeinated mode setup…") { caffeinate.removeSetup() })
+        let durationItem = NSMenuItem(title: "Turn off Caffeinated mode", action: nil, keyEquivalent: "")
+        durationItem.submenu = durations
+        menu.addItem(durationItem)
+    }
+
+    private func addPhoneItems(to menu: NSMenu) {
+        let phone = PhoneNotifier.shared
+        let settings = Settings.shared
+        let submenu = NSMenu()
+        if phone.topic == nil {
+            submenu.addItem(action("Set up…") { phone.showSetup() })
+        } else {
+            submenu.addItem(toggle("Send agent updates", phone.isEnabled) {
+                settings.set(Settings.Key.phoneEnabled, !settings.bool(Settings.Key.phoneEnabled))
+            })
+            submenu.addItem(toggle("Only when I'm away from the Mac", settings.bool(Settings.Key.phoneOnlyWhenAway)) {
+                settings.set(Settings.Key.phoneOnlyWhenAway, !settings.bool(Settings.Key.phoneOnlyWhenAway))
+            })
+            submenu.addItem(action("Send test notification") { phone.sendTest() })
+            submenu.addItem(action("Show topic…") { phone.showSetup() })
+        }
+        let item = NSMenuItem(title: "iPhone notifications", action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        menu.addItem(item)
     }
 
     private func action(_ title: String, _ handler: @escaping () -> Void) -> NSMenuItem {

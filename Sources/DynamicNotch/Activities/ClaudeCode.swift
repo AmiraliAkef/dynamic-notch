@@ -84,6 +84,7 @@ final class ClaudeStore: ObservableObject {
                               tab: .claude,
                               openBundle: session.hostBundle,
                               shakes: true))
+            PhoneNotifier.shared.claudeWaiting(session)
 
         case "Stop":
             let turn = Date.now.timeIntervalSince(session.since)
@@ -100,6 +101,7 @@ final class ClaudeStore: ObservableObject {
                                   duration: 4,
                                   tab: .claude,
                                   openBundle: session.hostBundle))
+                PhoneNotifier.shared.claudeFinished(session, turn: turn)
             }
 
         case "SessionEnd":
