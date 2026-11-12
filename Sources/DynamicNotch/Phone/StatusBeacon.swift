@@ -47,6 +47,9 @@ final class StatusBeacon: NSObject, ObservableObject {
 
     private static let serviceUUID = CBUUID(string: AgentLink.serviceUUID)
     private static let statusUUID = CBUUID(string: AgentLink.statusUUID)
+    private static let commandUUID = CBUUID(string: AgentLink.commandUUID)
+    /// The newest command accepted, so older (replayed) ones are rejected.
+    private var lastCommandAt: Int64 = 0
 
     var statusDescription: String {
         switch bluetoothState {
@@ -111,6 +114,7 @@ final class StatusBeacon: NSObject, ObservableObject {
         }
         let battery = BatteryMonitor.shared.state
         return AgentStatus(agents: busy, caffeinated: CaffeinateController.shared.isOn,
+                           canCaffeinate: CaffeinateController.shared.isSetUp,
                            battery: battery?.percent, charging: battery?.onAC ?? false)
     }
 
@@ -193,8 +197,10 @@ final class StatusBeacon: NSObject, ObservableObject {
             properties: [.read, .notify],
             value: nil,
             permissions: [.readable])
+        let command = CBMutableCharacteristic(type: Self.commandUUID, properties: [.write], value: nil,
+                                              permissions: [.writeable])
         let service = CBMutableService(type: Self.serviceUUID, primary: true)
-        service.characteristics = [characteristic]
+        service.characteristics = [characteristic, command]
         self.characteristic = characteristic
         manager.add(service)
     }
@@ -269,6 +275,39 @@ extension StatusBeacon: CBPeripheralManagerDelegate {
             guard let pending, let characteristic else { return }
             if peripheral.updateValue(pending, for: characteristic, onSubscribedCentrals: nil) {
                 self.pending = nil
+            }
+        }
+    }
+
+    /// Commands from the phone. Each must decrypt with the pairing key and be
+    /// newer than the last one accepted.
+    nonisolated func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
+        MainActor.assumeIsolated {
+            guard let request = requests.first else { return }
+            guard request.characteristic.uuid == Self.commandUUID, request.offset == 0, let data = request.value,
+                  let command = AgentCommand.open(data, key: key) else {
+                log.error("Rejected a command that didn't decrypt")
+                peripheral.respond(to: request, withResult: .insufficientAuthentication)
+                return
+            }
+            let now = Int64(Date.now.timeIntervalSince1970 * 1000)
+            guard command.sentAt > lastCommandAt, abs(now - command.sentAt) < Int64(AgentLink.commandMaxAge * 1000) else {
+                log.error("Rejected a stale or replayed command")
+                peripheral.respond(to: request, withResult: .insufficientAuthorization)
+                return
+            }
+            switch command.action {
+            case .caffeinate:
+                // Setup needs an admin password on the Mac, so it can't start from the phone.
+                guard CaffeinateController.shared.isSetUp else {
+                    peripheral.respond(to: request, withResult: .requestNotSupported)
+                    return
+                }
+                lastCommandAt = command.sentAt
+                peripheral.respond(to: request, withResult: .success)
+                log.notice("iPhone turned Caffeinated mode \(command.on ? "on" : "off", privacy: .public)")
+                let caffeinate = CaffeinateController.shared
+                if command.on { caffeinate.turnOn() } else { caffeinate.turnOff(reason: "Turned off from your iPhone") }
             }
         }
     }

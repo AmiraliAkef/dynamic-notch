@@ -47,13 +47,7 @@ struct ContentView: View {
                                 }
                             }
                         }
-                        LabeledContent("Caffeinated") {
-                            HStack(spacing: 6) {
-                                Image(systemName: status.caffeinated ? "cup.and.saucer.fill" : "cup.and.saucer")
-                                Text(status.caffeinated ? "On" : "Off")
-                            }
-                            .foregroundStyle(status.caffeinated ? .orange : .secondary)
-                        }
+                        CaffeinatedRow(status: status)
                     }
                 }
 
@@ -83,7 +77,6 @@ struct ContentView: View {
     private var header: some View {
         HStack(spacing: 14) {
             IndicatorDot(indicator: Indicator(state), size: 14)
-                .frame(width: 28, height: 28)
             VStack(alignment: .leading, spacing: 3) {
                 Text(link.isConnected ? state.status.headline : connectionTitle)
                     .font(.headline)
@@ -141,6 +134,51 @@ struct AgentRow: View {
             Text(agent.since, style: .timer)
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// Toggles Caffeinated mode on the Mac over the Bluetooth link.
+struct CaffeinatedRow: View {
+    var status: AgentStatus
+    @EnvironmentObject private var link: MacLink
+    @State private var sending = false
+    @State private var error: String?
+
+    var body: some View {
+        if status.canCaffeinate == false {
+            LabeledContent("Caffeinated") {
+                Text("Set it up on the Mac first").foregroundStyle(.secondary)
+            }
+        } else {
+            Toggle(isOn: Binding(get: { status.caffeinated }, set: { set($0) })) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Caffeinated")
+                        Text(error ?? "Stays awake with the lid closed")
+                            .font(.caption)
+                            .foregroundStyle(error == nil ? Color.secondary : Color.red)
+                    }
+                } icon: {
+                    Image(systemName: status.caffeinated ? "cup.and.saucer.fill" : "cup.and.saucer")
+                        .foregroundStyle(status.caffeinated ? .orange : .secondary)
+                }
+            }
+            .tint(.orange)
+            .disabled(sending)
+        }
+    }
+
+    private func set(_ on: Bool) {
+        sending = true
+        error = nil
+        Task {
+            do {
+                try await link.setCaffeinated(on)
+            } catch {
+                self.error = error.localizedDescription
+            }
+            sending = false
         }
     }
 }

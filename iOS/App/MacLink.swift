@@ -31,12 +31,16 @@ final class MacLink: NSObject, ObservableObject {
 
     private var key = AgentLinkKey.load()
     private var statusCharacteristic: CBCharacteristic?
+    private var commandCharacteristic: CBCharacteristic?
+    private var pendingWrite: CheckedContinuation<Void, Error>?
+    private var pendingWriteID = UUID()
 
     private var central: CBCentralManager?
     private var peripheral: CBPeripheral?
 
     private static let serviceUUID = CBUUID(string: AgentLink.serviceUUID)
     private static let statusUUID = CBUUID(string: AgentLink.statusUUID)
+    private static let commandUUID = CBUUID(string: AgentLink.commandUUID)
     private static let knownMacKey = "knownMac"
 
     func start() {
@@ -47,7 +51,7 @@ final class MacLink: NSObject, ObservableObject {
             macName = "MacBook Pro"
             apply(AgentStatus(agents: [.init(project: "dynamic_notch", state: .working, since: .now.addingTimeInterval(-342)),
                                           .init(project: "api-server", state: .working, since: .now.addingTimeInterval(-75))],
-                                 caffeinated: true, battery: 64, charging: false))
+                                 caffeinated: true, canCaffeinate: true, battery: 64, charging: false))
             return
         }
         #endif
@@ -60,11 +64,61 @@ final class MacLink: NSObject, ObservableObject {
         if let peripheral { central?.cancelPeripheralConnection(peripheral) }
         peripheral = nil
         statusCharacteristic = nil
+        commandCharacteristic = nil
         UserDefaults.standard.removeObject(forKey: Self.knownMacKey)
         findMac()
     }
 
     var isConnected: Bool { connection == .connected }
+
+    enum CommandError: LocalizedError {
+        case notConnected, notPaired, rejected(String), busy
+
+        var errorDescription: String? {
+            switch self {
+            case .notConnected: "Your Mac isn't connected."
+            case .notPaired: "Pair with your Mac first."
+            case .rejected(let reason): reason
+            case .busy: "Another command is still being sent."
+            }
+        }
+    }
+
+    /// Turns Caffeinated mode on the Mac on or off. Waits a few seconds for
+    /// the link when the app was just launched in the background for this.
+    func setCaffeinated(_ on: Bool) async throws {
+        guard let key else { throw CommandError.notPaired }
+        for _ in 0..<40 where commandCharacteristic == nil || peripheral?.state != .connected {
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        guard let peripheral, peripheral.state == .connected, let commandCharacteristic else {
+            throw CommandError.notConnected
+        }
+        guard pendingWrite == nil else { throw CommandError.busy }
+        guard let data = AgentCommand(action: .caffeinate, on: on).sealed(key: key) else { throw CommandError.notPaired }
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let id = UUID()
+            pendingWrite = continuation
+            pendingWriteID = id
+            peripheral.writeValue(data, for: commandCharacteristic, type: .withResponse)
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(5))
+                if self.pendingWriteID == id { self.finishWrite(CommandError.notConnected) }
+            }
+        }
+        // Show the change right away; the Mac's next status confirms it.
+        if var status {
+            status.caffeinated = on
+            apply(status)
+        }
+    }
+
+    private func finishWrite(_ error: Error?) {
+        guard let pendingWrite else { return }
+        self.pendingWrite = nil
+        if let error { pendingWrite.resume(throwing: error) } else { pendingWrite.resume() }
+    }
 
     /// Handles the `dynamicnotch://pair?...` link from the QR code on the Mac.
     @discardableResult
@@ -136,6 +190,8 @@ final class MacLink: NSObject, ObservableObject {
     }
 
     private func lostMac() {
+        commandCharacteristic = nil
+        finishWrite(CommandError.notConnected)
         connection = .connecting
         if let status { LiveActivityController.shared.update(status: status, connected: false) }
         findMac()
@@ -201,13 +257,14 @@ extension MacLink: CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         MainActor.assumeIsolated {
             guard let service = peripheral.services?.first(where: { $0.uuid == Self.serviceUUID }) else { return }
-            peripheral.discoverCharacteristics([Self.statusUUID], for: service)
+            peripheral.discoverCharacteristics([Self.statusUUID, Self.commandUUID], for: service)
         }
     }
 
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService,
                                 error: Error?) {
         MainActor.assumeIsolated {
+            commandCharacteristic = service.characteristics?.first { $0.uuid == Self.commandUUID }
             guard let characteristic = service.characteristics?.first(where: { $0.uuid == Self.statusUUID }) else { return }
             statusCharacteristic = characteristic
             if key == nil { connection = .notPaired }
@@ -228,6 +285,21 @@ extension MacLink: CBPeripheralDelegate {
         }
     }
 
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic,
+                                error: Error?) {
+        MainActor.assumeIsolated {
+            guard let error else { return finishWrite(nil) }
+            let reason: String
+            switch (error as? CBATTError)?.code {
+            case .requestNotSupported: reason = "Set up Caffeinated mode on the Mac first."
+            case .insufficientAuthentication: reason = "The Mac's pairing key changed. Scan its code again."
+            case .insufficientAuthorization: reason = "The Mac rejected the command. Check both clocks are set automatically."
+            default: reason = error.localizedDescription
+            }
+            finishWrite(CommandError.rejected(reason))
+        }
+    }
+
     nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic,
                                 error: Error?) {
         MainActor.assumeIsolated {
@@ -239,6 +311,7 @@ extension MacLink: CBPeripheralDelegate {
         MainActor.assumeIsolated {
             // Dynamic Notch restarted on the Mac: its service was re-added.
             statusCharacteristic = nil
+            commandCharacteristic = nil
             peripheral.discoverServices([Self.serviceUUID])
         }
     }

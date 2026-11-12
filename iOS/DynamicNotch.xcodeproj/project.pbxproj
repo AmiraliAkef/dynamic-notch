@@ -14,7 +14,9 @@
 		39FB7D03D9D4A4E4B280A54A /* AgentActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D8EDCEBBE81864C4A5121F /* AgentActivity.swift */; };
 		744F5ADC603CBB75EF05D037 /* LiveActivityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1EB091AC74052A66FCEC8F6 /* LiveActivityController.swift */; };
 		8783D03D19E7EE4ECAA635A0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9561EA220B787BF87111AEF4 /* Assets.xcassets */; };
+		93C5346308A5F7A63654BEDC /* CaffeinateIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A796B4FCCD1373E4CF387369 /* CaffeinateIntent.swift */; };
 		AF22FE73F6A82C4669776F1D /* DynamicNotchWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B706F3181F9707BF31D6A52E /* DynamicNotchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B2916C1B625003B0069D7D8A /* CaffeinateIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A796B4FCCD1373E4CF387369 /* CaffeinateIntent.swift */; };
 		C5BE75C9375923E882A18B3C /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E282E677870B570766452C3 /* ContentView.swift */; };
 		D9D74F93073739CE11C75949 /* DynamicNotchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = E37ACFD4C584945E41A14CBF /* DynamicNotchApp.swift */; };
 		FAC553A9ED80D962C62C56F6 /* AgentActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7D8EDCEBBE81864C4A5121F /* AgentActivity.swift */; };
@@ -51,6 +53,7 @@
 		8E282E677870B570766452C3 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		9561EA220B787BF87111AEF4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		9CEBEF9CF5838E670D65C478 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		A796B4FCCD1373E4CF387369 /* CaffeinateIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaffeinateIntent.swift; sourceTree = "<group>"; };
 		B706F3181F9707BF31D6A52E /* DynamicNotchWidgets.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = DynamicNotchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		B78DDFFDED9E84CDC5BB489F /* DynamicNotch.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = DynamicNotch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C1EB091AC74052A66FCEC8F6 /* LiveActivityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityController.swift; sourceTree = "<group>"; };
@@ -74,6 +77,7 @@
 			children = (
 				C7D8EDCEBBE81864C4A5121F /* AgentActivity.swift */,
 				88D76896F4283ABF92591813 /* AgentStatus.swift */,
+				A796B4FCCD1373E4CF387369 /* CaffeinateIntent.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -207,6 +211,7 @@
 			files = (
 				39FB7D03D9D4A4E4B280A54A /* AgentActivity.swift in Sources */,
 				28DBD298BFDE70427D3F86DF /* AgentStatus.swift in Sources */,
+				93C5346308A5F7A63654BEDC /* CaffeinateIntent.swift in Sources */,
 				C5BE75C9375923E882A18B3C /* ContentView.swift in Sources */,
 				D9D74F93073739CE11C75949 /* DynamicNotchApp.swift in Sources */,
 				744F5ADC603CBB75EF05D037 /* LiveActivityController.swift in Sources */,
@@ -221,6 +226,7 @@
 				FAC553A9ED80D962C62C56F6 /* AgentActivity.swift in Sources */,
 				21F77C62B7B2C3FD192FBB48 /* AgentLiveActivity.swift in Sources */,
 				2D512279039B8DFD103F07E5 /* AgentStatus.swift in Sources */,
+				B2916C1B625003B0069D7D8A /* CaffeinateIntent.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

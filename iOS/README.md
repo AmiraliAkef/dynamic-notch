@@ -17,6 +17,10 @@ Over **Bluetooth LE**, with no server, no push notifications and no paid develop
 3. Plug in your iPhone, select it as the run destination, and press **Run**. The first time, trust the developer profile on the phone: Settings › General › VPN & Device Management.
 4. Open the app and allow Bluetooth. On the Mac, choose **Pair iPhone…** in the Dynamic Notch menu, point the iPhone's Camera at the QR code and tap the link. The Live Activity starts on its own.
 
+## Caffeinated mode from the iPhone
+
+The ☕ button on the Lock Screen banner and in the expanded Dynamic Island (and the toggle in the app) turns Caffeinated mode on the Mac on or off. The command is written to a second Bluetooth characteristic, sealed with the same pairing key and timestamped, so only your phone can send one and a recorded command can't be replayed. Caffeinated mode must be set up on the Mac once first (it needs your admin password).
+
 ## Limits
 
 - **Range**: Bluetooth reaches about 10 m.

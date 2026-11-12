@@ -32,13 +32,17 @@ public struct AgentStatus: Codable, Hashable, Sendable {
     /// Agents that weren't included in `agents` because of the size limit.
     public var hiddenAgents: Int
     public var caffeinated: Bool
+    /// Whether Caffeinated mode is set up on the Mac, so the phone can toggle it.
+    /// Optional so statuses from older Mac builds still decode.
+    public var canCaffeinate: Bool?
     public var battery: Int?
     public var charging: Bool
     /// When the Mac sent this; the phone treats old statuses as stale.
     public var sentAt: Date
 
-    public init(agents: [Agent], hiddenAgents: Int = 0, caffeinated: Bool, battery: Int?, charging: Bool,
-                sentAt: Date = .now) {
+    public init(agents: [Agent], hiddenAgents: Int = 0, caffeinated: Bool, canCaffeinate: Bool? = nil,
+                battery: Int?, charging: Bool, sentAt: Date = .now) {
+        self.canCaffeinate = canCaffeinate
         self.agents = agents.sorted { $0.state.rawValue > $1.state.rawValue }
         self.hiddenAgents = hiddenAgents
         self.caffeinated = caffeinated
@@ -48,7 +52,8 @@ public struct AgentStatus: Codable, Hashable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case agents = "a", hiddenAgents = "h", caffeinated = "c", battery = "b", charging = "p", sentAt = "t"
+        case agents = "a", hiddenAgents = "h", caffeinated = "c", canCaffeinate = "k", battery = "b",
+             charging = "p", sentAt = "t"
     }
 
     public static let idle = AgentStatus(agents: [], caffeinated: false, battery: nil, charging: false,
@@ -118,6 +123,10 @@ public struct AgentStatus: Codable, Hashable, Sendable {
 /// `dynamicnotch://pair?key=<base64url>&name=<Mac name>`.
 public enum AgentLink {
     public static let pairingScheme = "dynamicnotch"
+    /// The iPhone writes sealed `AgentCommand`s here.
+    public static let commandUUID = "6E0B8A54-3C1D-4F7E-9A55-1D2B7C0F4E91"
+    /// Commands older than this (or not newer than the last one) are rejected.
+    public static let commandMaxAge: TimeInterval = 120
     /// AES-GCM nonce (12) + tag (16).
     public static let sealOverhead = 28
 
@@ -154,6 +163,36 @@ public enum AgentLink {
     public static let heartbeat: TimeInterval = 60
     /// After this long without a status, the phone shows the Mac as gone.
     public static let staleAfter: TimeInterval = 150
+}
+
+/// A command from the iPhone. It's sealed with the pairing key, so only the
+/// paired phone can send one; `sentAt` must keep increasing, so a recorded
+/// command can't be replayed.
+public struct AgentCommand: Codable, Sendable {
+    public enum Action: String, Codable, Sendable { case caffeinate }
+
+    public var action: Action
+    public var on: Bool
+    /// Milliseconds since 1970.
+    public var sentAt: Int64
+
+    public init(action: Action, on: Bool, sentAt: Date = .now) {
+        self.action = action
+        self.on = on
+        self.sentAt = Int64(sentAt.timeIntervalSince1970 * 1000)
+    }
+
+    enum CodingKeys: String, CodingKey { case action = "a", on = "o", sentAt = "t" }
+
+    public func sealed(key: SymmetricKey) -> Data? {
+        guard let data = try? JSONEncoder().encode(self) else { return nil }
+        return AgentLink.seal(data, key: key)
+    }
+
+    public static func open(_ data: Data, key: SymmetricKey) -> AgentCommand? {
+        guard let plain = AgentLink.open(data, key: key) else { return nil }
+        return try? JSONDecoder().decode(AgentCommand.self, from: plain)
+    }
 }
 
 extension SymmetricKey {

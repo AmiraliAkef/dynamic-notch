@@ -8,6 +8,7 @@ struct DynamicNotchApp: App {
         // Also runs when iOS relaunches the app in the background for a
         // Bluetooth event (state restoration).
         MacLink.shared.start()
+        CaffeinateRemote.handler = { on in try await MacLink.shared.setCaffeinated(on) }
     }
 
     var body: some Scene {

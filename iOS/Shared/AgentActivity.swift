@@ -45,11 +45,15 @@ struct IndicatorDot: View {
     var size: CGFloat = 8
 
     var body: some View {
+        let glows = indicator == .working || indicator == .waiting
         Circle()
             .fill(indicator.color)
             .frame(width: size, height: size)
-            .shadow(color: indicator == .idle || indicator == .offline ? .clear : indicator.color.opacity(0.9),
-                    radius: size * 0.45)
+            // Two layers: a tight bright core and a soft halo, like the mic dot.
+            .shadow(color: glows ? indicator.color : .clear, radius: size * 0.35)
+            .shadow(color: glows ? indicator.color.opacity(0.7) : .clear, radius: size * 0.8)
+            // Room for the halo, so the Dynamic Island doesn't clip it.
+            .frame(width: size * 2.6, height: size * 2.6)
     }
 }
 

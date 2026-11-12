@@ -31,7 +31,7 @@ struct AgentLiveActivity: Widget {
                     .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    MacBadges(status: state.status)
+                    MacBadges(status: state.status, interactive: indicator != .offline)
                         .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
@@ -39,12 +39,13 @@ struct AgentLiveActivity: Widget {
                         .padding(.horizontal, 4)
                 }
             } compactLeading: {
-                IndicatorDot(indicator: indicator)
-                    .padding(.leading, 2)
+                IndicatorDot(indicator: indicator, size: 10)
+                    .padding(.leading, 4)
             } compactTrailing: {
                 CompactTrailing(state: state, indicator: indicator)
+                    .padding(.horizontal, 4)
             } minimal: {
-                IndicatorDot(indicator: indicator)
+                IndicatorDot(indicator: indicator, size: 9)
             }
             .keylineTint(indicator.color)
         }
@@ -87,7 +88,7 @@ private struct LockScreenView: View {
                     .foregroundStyle(.white)
                     .lineLimit(1)
                 Spacer(minLength: 8)
-                MacBadges(status: state.status)
+                MacBadges(status: state.status, interactive: indicator != .offline)
             }
             AgentList(state: state, isStale: isStale, limit: 2)
         }
@@ -139,13 +140,25 @@ private struct AgentList: View {
     }
 }
 
-/// Caffeinated cup and Mac battery.
+/// Caffeinated cup (a button that toggles it on the Mac) and Mac battery.
 private struct MacBadges: View {
     var status: AgentStatus
+    /// False while the Mac is out of range: commands couldn't reach it.
+    var interactive: Bool
 
     var body: some View {
         HStack(spacing: 8) {
-            if status.caffeinated {
+            if interactive, status.canCaffeinate != false {
+                Button(intent: SetCaffeinatedIntent(on: !status.caffeinated)) {
+                    Image(systemName: status.caffeinated ? "cup.and.saucer.fill" : "cup.and.saucer")
+                        .font(.subheadline)
+                        .foregroundStyle(status.caffeinated ? .orange : .white.opacity(0.7))
+                        .frame(width: 34, height: 28)
+                        .background(Capsule().fill(status.caffeinated ? Color.orange.opacity(0.22) : .white.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(status.caffeinated ? "Turn off Caffeinated mode" : "Turn on Caffeinated mode")
+            } else if status.caffeinated {
                 Image(systemName: "cup.and.saucer.fill").foregroundStyle(.orange)
             }
             if let battery = status.battery {
