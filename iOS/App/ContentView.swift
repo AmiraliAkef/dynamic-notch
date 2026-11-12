@@ -56,7 +56,7 @@ struct ContentView: View {
                         Button("Restart indicator") { activity.startIfNeeded() }
                     }
                 } footer: {
-                    Text("A dot in the Dynamic Island and a Lock Screen banner: orange while agents work, red when one needs you. It also shows on your Mac through iPhone Mirroring.")
+                    Text("A dot in the Dynamic Island and a Lock Screen banner: orange while agents work, red when one needs you.")
                 }
 
                 Section {

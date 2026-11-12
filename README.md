@@ -9,7 +9,7 @@ A Dynamic Island for the MacBook notch. It lives around the camera notch and sho
 - **Two at once**: like the iPhone, a second activity gets its own bubble to the right of the notch while the main one stays on the left wing. Click either side to open it.
 - **System**: charger plugged in or unplugged, low battery, Bluetooth devices (AirPods…) connecting.
 - **Caffeinated mode**: the ☕ button in the expanded notch (or the menu) keeps the Mac awake **with the lid closed**, so agents keep working in your bag. It turns itself off when the battery drops below 20% (configurable), when the Mac gets hot, after a set time, or when your agents finish, and it's always undone when the app quits. The menu bar icon becomes a cup while it's on.
-- **iPhone indicator**: a companion iPhone app shows a Live Activity on the Lock Screen and in the Dynamic Island, with an orange dot while your agents work (red while one is waiting for you). The Mac sends status over an encrypted Bluetooth LE link, so there's no server and no paid developer account. Live Activities also show on the Mac through iPhone Mirroring. See [iOS/README.md](iOS/README.md).
+- **iPhone indicator**: a companion iPhone app shows a Live Activity on the Lock Screen and in the Dynamic Island, with an orange dot while your agents work (red while one is waiting for you). The Mac sends status over an encrypted Bluetooth LE link, so there's no server and no paid developer account. See [iOS/README.md](iOS/README.md).
 
 ## Build & install
 

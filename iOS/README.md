@@ -1,6 +1,6 @@
 # Dynamic Notch for iPhone
 
-A companion app that shows your Mac's agents as a **Live Activity** on the Lock Screen and in the Dynamic Island. The dot is orange while agents work (like the mic indicator), red when one is waiting for you, and grey when everything is idle or the Mac is out of range. iPhone Live Activities also show in the Mac menu bar through iPhone Mirroring.
+A companion app that shows your Mac's agents as a **Live Activity** on the Lock Screen and in the Dynamic Island. The dot is orange while agents work (like the mic indicator), red when one is waiting for you, and grey when everything is idle or the Mac is out of range.
 
 ## How it talks to the Mac
 
