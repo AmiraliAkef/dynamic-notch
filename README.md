@@ -49,6 +49,7 @@ notch notify "Deploy finished" "api-server" --icon checkmark.circle.fill
 | Clock.app timers, read from mobiletimerd's Core Data store (`ZMTCDTIMER`; state 2 = paused, 3 = running; end date archived as `MTTimerDate`) | `Activities/ClockAppTimers.swift` |
 | Caffeinated mode: `pmset disablesleep` via a narrow sudoers rule, plus battery/thermal/time/agent safety checks and crash recovery on next launch | `Activities/Caffeinate.swift` |
 | iPhone notifications: JSON POST to an ntfy topic on Claude "waiting"/"finished" and Caffeinated auto-off | `Activities/PhoneNotifier.swift` |
+| App icon: `Resources/AppIcon.icon` (Icon Composer format, with default, dark and tinted appearances) for macOS 26+, plus a classic `.icns` from `DynamicNotchIcons/AppIcon.appiconset` for older systems. Edit the SVG masters in `DynamicNotchIcons/`, then run `scripts/make-app-icon.sh` | `build.sh` |
 | zsh hook using `zsh/net/socket`, so it adds no extra process per command | `hooks/notch.zsh` |
 
 The Now Playing and Clock integrations use undocumented system internals, so a future macOS update may break them. Each one fails on its own without affecting the rest of the app.
