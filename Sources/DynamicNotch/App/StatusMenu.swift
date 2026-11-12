@@ -167,6 +167,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             let info = NSMenuItem(title: "    \(beacon.statusDescription)", action: nil, keyEquivalent: "")
             info.isEnabled = false
             menu.addItem(info)
+            menu.addItem(action("    Pair iPhone…") { beacon.showPairing() })
         }
     }
 

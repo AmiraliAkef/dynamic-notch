@@ -36,6 +36,9 @@ targets:
         NSBluetoothAlwaysUsageDescription: Dynamic Notch connects to your Mac over Bluetooth to show what your agents are doing.
         UIBackgroundModes: [bluetooth-central]
         UILaunchScreen: {}
+        CFBundleURLTypes:
+          - CFBundleURLName: com.amirali.dynamicnotch.pair
+            CFBundleURLSchemes: [dynamicnotch]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
     dependencies:
       - target: DynamicNotchWidgets

@@ -9,7 +9,7 @@ A Dynamic Island for the MacBook notch. It lives around the camera notch and sho
 - **Two at once**: like the iPhone, a second activity gets its own bubble to the right of the notch while the main one stays on the left wing. Click either side to open it.
 - **System**: charger plugged in or unplugged, low battery, Bluetooth devices (AirPods…) connecting.
 - **Caffeinated mode**: the ☕ button in the expanded notch (or the menu) keeps the Mac awake **with the lid closed**, so agents keep working in your bag. It turns itself off when the battery drops below 20% (configurable), when the Mac gets hot, after a set time, or when your agents finish, and it's always undone when the app quits. The menu bar icon becomes a cup while it's on.
-- **iPhone indicator**: a companion iPhone app shows a Live Activity on the Lock Screen and in the Dynamic Island, with an orange dot while your agents work (red while one is waiting for you). The Mac sends status over an encrypted Bluetooth LE link, so there's no server and no paid developer account. See [iOS/README.md](iOS/README.md).
+- **iPhone indicator**: a companion iPhone app shows a Live Activity on the Lock Screen and in the Dynamic Island, with an orange dot while your agents work (red while one is waiting for you). The Mac sends status over Bluetooth LE, encrypted with a key you pair once by QR code, so there's no server and no paid developer account. See [iOS/README.md](iOS/README.md).
 
 ## Build & install
 
@@ -47,7 +47,7 @@ notch notify "Deploy finished" "api-server" --icon checkmark.circle.fill
 | Live equalizer. Taps the Now Playing app's audio processes (falls back to all system audio), FFTs it into 6 log-spaced bands with adaptive gain, and delays the result by the output latency so the bars match what you hear | `Activities/AudioVisualizer.swift` |
 | Clock.app timers, read from mobiletimerd's Core Data store (`ZMTCDTIMER`; state 2 = paused, 3 = running; end date archived as `MTTimerDate`) | `Activities/ClockAppTimers.swift` |
 | Caffeinated mode: `pmset disablesleep` via a narrow sudoers rule, plus battery/thermal/time/agent safety checks and crash recovery on next launch | `Activities/Caffeinate.swift` |
-| iPhone indicator: a CoreBluetooth peripheral publishing a compact `AgentStatus` (encryption required, so iOS pairs once), with a 60s heartbeat so the phone can tell when the Mac is gone | `Phone/StatusBeacon.swift`, `NotchShared/AgentStatus.swift`, `iOS/` |
+| iPhone indicator: a CoreBluetooth peripheral publishing a compact `AgentStatus` (each value sealed with AES-GCM; the key is paired once by QR code), with a 60s heartbeat so the phone can tell when the Mac is gone | `Phone/StatusBeacon.swift`, `NotchShared/AgentStatus.swift`, `iOS/` |
 | App icon: `Resources/AppIcon.icon` (Icon Composer format, with default, dark and tinted appearances) for macOS 26+, plus a classic `.icns` from `DynamicNotchIcons/AppIcon.appiconset` for older systems. Edit the SVG masters in `DynamicNotchIcons/`, then run `scripts/make-app-icon.sh` | `build.sh` |
 | zsh hook using `zsh/net/socket`, so it adds no extra process per command | `hooks/notch.zsh` |
 

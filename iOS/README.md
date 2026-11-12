@@ -8,14 +8,14 @@ Over **Bluetooth LE**, with no server, no push notifications and no paid develop
 
 - Dynamic Notch on the Mac is a Bluetooth peripheral publishing one `AgentStatus` value (`Sources/NotchShared/AgentStatus.swift`, shared by both apps). It sends on every change and every 60s as a heartbeat.
 - The iPhone app subscribes with the `bluetooth-central` background mode, so iOS wakes it for each update and it refreshes the Live Activity. If the Mac stops sending for 2.5 minutes, the activity greys out ("Mac out of range") without the app having to run.
-- The value requires encryption, so iOS shows a one-time pairing prompt and nobody else nearby can read it.
+- macOS doesn't let apps accept Bluetooth pairing, so each status is encrypted with AES-GCM instead. The key is made on the Mac and handed to the iPhone once through a QR code; anyone nearby can connect, but only the paired phone can read it.
 
 ## Install on your iPhone
 
 1. On the Mac, turn on **iPhone indicator** in the Dynamic Notch menu (it's on by default) and allow Bluetooth if macOS asks.
 2. `cd iOS && xcodegen` (only needed after editing `project.yml`; `brew install xcodegen`), then `open DynamicNotch.xcodeproj`.
 3. Plug in your iPhone, select it as the run destination, and press **Run**. The first time, trust the developer profile on the phone: Settings › General › VPN & Device Management.
-4. Open the app, allow Bluetooth, and accept the pairing prompt. The Live Activity starts on its own.
+4. Open the app and allow Bluetooth. On the Mac, choose **Pair iPhone…** in the Dynamic Notch menu, point the iPhone's Camera at the QR code and tap the link. The Live Activity starts on its own.
 
 ## Limits
 

@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+import Security
 
 /// What the Mac tells the iPhone: which agents are busy, plus a little Mac
 /// context. Compiled into both the Mac app and the iOS app/widget (the iOS
@@ -108,11 +110,99 @@ public struct AgentStatus: Codable, Hashable, Sendable {
 }
 
 /// Bluetooth identifiers shared by the Mac (peripheral) and iPhone (central).
+///
+/// Bluetooth-level pairing isn't available to apps on macOS (bluetoothd
+/// denies the request when no system UI handles it), so the link itself is
+/// open and every status is sealed with AES-GCM instead. The key is made on
+/// the Mac and handed to the iPhone once through a QR code:
+/// `dynamicnotch://pair?key=<base64url>&name=<Mac name>`.
 public enum AgentLink {
+    public static let pairingScheme = "dynamicnotch"
+    /// AES-GCM nonce (12) + tag (16).
+    public static let sealOverhead = 28
+
+    public static func seal(_ data: Data, key: SymmetricKey) -> Data? {
+        try? AES.GCM.seal(data, using: key).combined
+    }
+
+    public static func open(_ data: Data, key: SymmetricKey) -> Data? {
+        guard let box = try? AES.GCM.SealedBox(combined: data) else { return nil }
+        return try? AES.GCM.open(box, using: key)
+    }
+
+    public static func pairingURL(key: SymmetricKey, macName: String) -> URL? {
+        var components = URLComponents()
+        components.scheme = pairingScheme
+        components.host = "pair"
+        components.queryItems = [URLQueryItem(name: "key", value: key.base64URL),
+                                 URLQueryItem(name: "name", value: macName)]
+        return components.url
+    }
+
+    /// Reads the key and Mac name from a pairing URL.
+    public static func parsePairingURL(_ url: URL) -> (key: SymmetricKey, macName: String?)? {
+        guard url.scheme == pairingScheme, url.host == "pair",
+              let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
+              let encoded = items.first(where: { $0.name == "key" })?.value,
+              let key = SymmetricKey(base64URL: encoded) else { return nil }
+        return (key, items.first(where: { $0.name == "name" })?.value)
+    }
+
     public static let serviceUUID = "6E0B8A52-3C1D-4F7E-9A55-1D2B7C0F4E91"
     public static let statusUUID = "6E0B8A53-3C1D-4F7E-9A55-1D2B7C0F4E91"
     /// How often the Mac re-sends its status while connected.
     public static let heartbeat: TimeInterval = 60
     /// After this long without a status, the phone shows the Mac as gone.
     public static let staleAfter: TimeInterval = 150
+}
+
+extension SymmetricKey {
+    public var base64URL: String {
+        withUnsafeBytes { Data($0) }.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    public init?(base64URL: String) {
+        var text = base64URL.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while text.count % 4 != 0 { text += "=" }
+        guard let data = Data(base64Encoded: text), data.count == 32 else { return nil }
+        self.init(data: data)
+    }
+}
+
+/// The pairing key, kept in the Keychain on both devices. Readable after the
+/// first unlock, so the iPhone app can decrypt while woken in the background.
+public enum AgentLinkKey {
+    private static let service = "com.amirali.dynamicnotch.link"
+    private static let account = "pairing-key"
+
+    public static func load() -> SymmetricKey? {
+        var result: CFTypeRef?
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: service,
+                                    kSecAttrAccount as String: account,
+                                    kSecReturnData as String: true]
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data, data.count == 32 else { return nil }
+        return SymmetricKey(data: data)
+    }
+
+    @discardableResult
+    public static func save(_ key: SymmetricKey) -> Bool {
+        delete()
+        let data = key.withUnsafeBytes { Data($0) }
+        let item: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                   kSecAttrService as String: service,
+                                   kSecAttrAccount as String: account,
+                                   kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+                                   kSecValueData as String: data]
+        return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
+    }
+
+    public static func delete() {
+        SecItemDelete([kSecClass as String: kSecClassGenericPassword,
+                       kSecAttrService as String: service,
+                       kSecAttrAccount as String: account] as CFDictionary)
+    }
 }

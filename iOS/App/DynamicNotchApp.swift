@@ -15,6 +15,7 @@ struct DynamicNotchApp: App {
             ContentView()
                 .environmentObject(MacLink.shared)
                 .environmentObject(LiveActivityController.shared)
+                .onOpenURL { url in MacLink.shared.pair(with: url) }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { LiveActivityController.shared.startIfNeeded() }

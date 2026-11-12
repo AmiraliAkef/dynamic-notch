@@ -13,6 +13,17 @@ struct ContentView: View {
             List {
                 Section {
                     header
+                    if let error = link.lastError {
+                        Label(error, systemImage: "exclamationmark.triangle")
+                            .font(.footnote).foregroundStyle(.orange)
+                    }
+                }
+
+                if link.connection == .notPaired || link.connection == .wrongKey || !link.isPaired {
+                    Section("Pair with your Mac") {
+                        Label("On the Mac, open the Dynamic Notch menu and choose **Pair iPhone…**", systemImage: "1.circle")
+                        Label("Point this iPhone's Camera at the code and tap the link", systemImage: "2.circle")
+                    }
                 }
 
                 if let status = link.status, link.isConnected {
@@ -92,6 +103,8 @@ struct ContentView: View {
         case .searching: "Looking for your Mac…"
         case .connecting: "Connecting to your Mac…"
         case .connected: "Connected"
+        case .notPaired: "Not paired yet"
+        case .wrongKey: "Pairing key doesn't match"
         }
     }
 
@@ -101,6 +114,10 @@ struct ContentView: View {
             return "Connected to \(link.macName ?? "your Mac")"
         case .unauthorized:
             return "Allow Bluetooth for Dynamic Notch in Settings."
+        case .notPaired:
+            return "Found \(link.macName ?? "your Mac"). Scan its pairing code to finish."
+        case .wrongKey:
+            return "The Mac's key changed. Scan its pairing code again."
         case .searching, .connecting:
             return "On the Mac, turn on “iPhone indicator” in the Dynamic Notch menu."
         default:

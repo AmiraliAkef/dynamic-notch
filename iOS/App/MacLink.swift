@@ -1,4 +1,5 @@
 import CoreBluetooth
+import CryptoKit
 import Foundation
 
 /// Bluetooth LE connection to Dynamic Notch on the Mac.
@@ -15,12 +16,21 @@ final class MacLink: NSObject, ObservableObject {
 
     enum Connection: Equatable {
         case starting, bluetoothOff, unauthorized, searching, connecting, connected
+        /// Connected, but no pairing key yet: scan the QR code on the Mac.
+        case notPaired
+        /// The Mac's key changed (or another Mac answered): scan the code again.
+        case wrongKey
     }
 
     @Published private(set) var connection: Connection = .starting
     @Published private(set) var status: AgentStatus?
     @Published private(set) var updatedAt: Date?
-    @Published private(set) var macName: String?
+    @Published private(set) var macName: String? = UserDefaults.standard.string(forKey: "pairedMacName")
+    @Published private(set) var lastError: String?
+    var isPaired: Bool { key != nil }
+
+    private var key = AgentLinkKey.load()
+    private var statusCharacteristic: CBCharacteristic?
 
     private var central: CBCentralManager?
     private var peripheral: CBPeripheral?
@@ -35,9 +45,9 @@ final class MacLink: NSObject, ObservableObject {
         // For screenshots in the Simulator, which has no Bluetooth.
         if ProcessInfo.processInfo.arguments.contains("-demoStatus") {
             macName = "MacBook Pro"
-            received(AgentStatus(agents: [.init(project: "dynamic_notch", state: .working, since: .now.addingTimeInterval(-342)),
+            apply(AgentStatus(agents: [.init(project: "dynamic_notch", state: .working, since: .now.addingTimeInterval(-342)),
                                           .init(project: "api-server", state: .working, since: .now.addingTimeInterval(-75))],
-                                 caffeinated: true, battery: 64, charging: false).encoded())
+                                 caffeinated: true, battery: 64, charging: false))
             return
         }
         #endif
@@ -49,11 +59,32 @@ final class MacLink: NSObject, ObservableObject {
     func reconnect() {
         if let peripheral { central?.cancelPeripheralConnection(peripheral) }
         peripheral = nil
+        statusCharacteristic = nil
         UserDefaults.standard.removeObject(forKey: Self.knownMacKey)
         findMac()
     }
 
     var isConnected: Bool { connection == .connected }
+
+    /// Handles the `dynamicnotch://pair?...` link from the QR code on the Mac.
+    @discardableResult
+    func pair(with url: URL) -> Bool {
+        guard let (key, name) = AgentLink.parsePairingURL(url) else { return false }
+        AgentLinkKey.save(key)
+        self.key = key
+        if let name {
+            macName = name
+            UserDefaults.standard.set(name, forKey: "pairedMacName")
+        }
+        lastError = nil
+        // Read straight away instead of waiting for the next heartbeat.
+        if let peripheral, let statusCharacteristic, peripheral.state == .connected {
+            peripheral.readValue(for: statusCharacteristic)
+        } else {
+            findMac()
+        }
+        return true
+    }
 
     // MARK: Connecting
 
@@ -80,13 +111,24 @@ final class MacLink: NSObject, ObservableObject {
     private func connect(_ peripheral: CBPeripheral) {
         self.peripheral = peripheral
         peripheral.delegate = self
-        macName = peripheral.name
         connection = .connecting
         central?.connect(peripheral)
     }
 
     private func received(_ data: Data) {
-        guard let status = AgentStatus.decode(data) else { return }
+        guard let key else {
+            connection = .notPaired
+            return
+        }
+        guard let plain = AgentLink.open(data, key: key), let status = AgentStatus.decode(plain) else {
+            connection = .wrongKey
+            return
+        }
+        lastError = nil
+        apply(status)
+    }
+
+    private func apply(_ status: AgentStatus) {
         self.status = status
         updatedAt = .now
         connection = .connected
@@ -129,7 +171,6 @@ extension MacLink: CBCentralManagerDelegate {
             if let current = self.peripheral, current.identifier != peripheral.identifier {
                 central.cancelPeripheralConnection(current)
             }
-            macName = advertisementData[CBAdvertisementDataLocalNameKey] as? String ?? peripheral.name
             connect(peripheral)
         }
     }
@@ -168,7 +209,8 @@ extension MacLink: CBPeripheralDelegate {
                                 error: Error?) {
         MainActor.assumeIsolated {
             guard let characteristic = service.characteristics?.first(where: { $0.uuid == Self.statusUUID }) else { return }
-            // Encryption is required, so the first read triggers iOS's one-time pairing prompt.
+            statusCharacteristic = characteristic
+            if key == nil { connection = .notPaired }
             peripheral.readValue(for: characteristic)
             peripheral.setNotifyValue(true, for: characteristic)
         }
@@ -177,14 +219,26 @@ extension MacLink: CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic,
                                 error: Error?) {
         MainActor.assumeIsolated {
-            guard error == nil, let data = characteristic.value else { return }
+            if let error {
+                lastError = error.localizedDescription
+                return
+            }
+            guard let data = characteristic.value else { return }
             received(data)
+        }
+    }
+
+    nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic,
+                                error: Error?) {
+        MainActor.assumeIsolated {
+            if let error { lastError = error.localizedDescription }
         }
     }
 
     nonisolated func peripheral(_ peripheral: CBPeripheral, didModifyServices invalidatedServices: [CBService]) {
         MainActor.assumeIsolated {
             // Dynamic Notch restarted on the Mac: its service was re-added.
+            statusCharacteristic = nil
             peripheral.discoverServices([Self.serviceUUID])
         }
     }
