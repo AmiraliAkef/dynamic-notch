@@ -49,11 +49,9 @@ struct IndicatorDot: View {
         Circle()
             .fill(indicator.color)
             .frame(width: size, height: size)
-            // Two layers: a tight bright core and a soft halo, like the mic dot.
-            .shadow(color: glows ? indicator.color : .clear, radius: size * 0.35)
-            .shadow(color: glows ? indicator.color.opacity(0.7) : .clear, radius: size * 0.8)
-            // Room for the halo, so the Dynamic Island doesn't clip it.
-            .frame(width: size * 2.6, height: size * 2.6)
+            .shadow(color: glows ? indicator.color.opacity(0.9) : .clear, radius: size * 0.45)
+            // Clear space around the dot so the Dynamic Island doesn't clip the glow.
+            .frame(width: size * 3.5, height: size * 3.5)
     }
 }
 

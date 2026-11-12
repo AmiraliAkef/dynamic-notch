@@ -101,7 +101,7 @@ private struct StatusCluster: View {
 /// of it, so the number reads in the notch's black.
 private struct BatteryGlyph: View {
     var state: BatteryState
-    private let size = CGSize(width: 25, height: 12)
+    private let size = CGSize(width: 27, height: 12.5)
 
     private var fill: Color {
         if state.onAC { return .green }
@@ -116,10 +116,19 @@ private struct BatteryGlyph: View {
             ZStack(alignment: .leading) {
                 body.fill(.white.opacity(0.35))
                 Rectangle().fill(fill).frame(width: size.width * level)
-                Text("\(state.percent)")
-                    .font(.system(size: 9.5, weight: .bold, design: .rounded).monospacedDigit())
-                    .frame(width: size.width)
-                    .blendMode(.destinationOut)
+                // The number (and the charging bolt beside it, like iOS) is cut out of the fill.
+                HStack(spacing: 0.5) {
+                    Text("\(state.percent)")
+                        .font(.system(size: state.onAC && state.percent >= 100 ? 8.5 : 9.5,
+                                      weight: .bold, design: .rounded).monospacedDigit())
+                    if state.onAC {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 7, weight: .heavy))
+                    }
+                }
+                .fixedSize()
+                .frame(width: size.width)
+                .blendMode(.destinationOut)
             }
             .frame(width: size.width, height: size.height)
             .clipShape(body)
@@ -128,13 +137,8 @@ private struct BatteryGlyph: View {
             UnevenRoundedRectangle(bottomTrailingRadius: 1.5, topTrailingRadius: 1.5)
                 .fill(state.percent >= 100 ? fill : .white.opacity(0.35))
                 .frame(width: 1.5, height: 4)
-
-            if state.onAC {
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.85))
-            }
         }
+        .fixedSize()
         .help(state.onAC ? "\(state.percent)% · Charging" : "\(state.percent)%")
         .accessibilityElement()
         .accessibilityLabel("Battery \(state.percent) percent\(state.onAC ? ", charging" : "")")

@@ -39,13 +39,13 @@ struct AgentLiveActivity: Widget {
                         .padding(.horizontal, 4)
                 }
             } compactLeading: {
-                IndicatorDot(indicator: indicator, size: 10)
+                IndicatorDot(indicator: indicator)
                     .padding(.leading, 4)
             } compactTrailing: {
                 CompactTrailing(state: state, indicator: indicator)
                     .padding(.horizontal, 4)
             } minimal: {
-                IndicatorDot(indicator: indicator, size: 9)
+                IndicatorDot(indicator: indicator)
             }
             .keylineTint(indicator.color)
         }
@@ -162,11 +162,19 @@ private struct MacBadges: View {
                 Image(systemName: "cup.and.saucer.fill").foregroundStyle(.orange)
             }
             if let battery = status.battery {
-                HStack(spacing: 3) {
+                HStack(spacing: 4) {
                     Image(systemName: "laptopcomputer")
-                    Text("\(battery)%").monospacedDigit()
-                    if status.charging { Image(systemName: "bolt.fill").foregroundStyle(.green) }
+                    HStack(spacing: 1) {
+                        Text("\(battery)%").monospacedDigit()
+                        if status.charging {
+                            Image(systemName: "bolt.fill")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundStyle(.green)
+                        }
+                    }
                 }
+                .lineLimit(1)
+                .fixedSize()
                 .foregroundStyle(battery <= 20 && !status.charging ? .red : .secondary)
             }
         }
