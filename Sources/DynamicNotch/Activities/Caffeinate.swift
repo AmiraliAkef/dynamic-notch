@@ -116,7 +116,7 @@ final class CaffeinateController: ObservableObject {
         }
     }
 
-    /// `reason` is set for automatic turn-offs; those are also sent to the iPhone.
+    /// `reason` is set for automatic turn-offs and shown in the banner.
     func turnOff(reason: String?) {
         guard !isBusy, isOn else { return }
         isBusy = true
@@ -133,9 +133,6 @@ final class CaffeinateController: ObservableObject {
             stopTicking()
             announce("Caffeinated mode off", subtitle: reason ?? "Your Mac will sleep normally",
                      symbol: "cup.and.saucer")
-            if let reason {
-                PhoneNotifier.shared.send(title: "Caffeinated mode off", message: reason, tags: ["coffee"])
-            }
         }
     }
 

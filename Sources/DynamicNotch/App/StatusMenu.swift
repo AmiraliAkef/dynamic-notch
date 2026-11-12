@@ -158,24 +158,16 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     private func addPhoneItems(to menu: NSMenu) {
-        let phone = PhoneNotifier.shared
+        let beacon = StatusBeacon.shared
         let settings = Settings.shared
-        let submenu = NSMenu()
-        if phone.topic == nil {
-            submenu.addItem(action("Set up…") { phone.showSetup() })
-        } else {
-            submenu.addItem(toggle("Send agent updates", phone.isEnabled) {
-                settings.set(Settings.Key.phoneEnabled, !settings.bool(Settings.Key.phoneEnabled))
-            })
-            submenu.addItem(toggle("Only when I'm away from the Mac", settings.bool(Settings.Key.phoneOnlyWhenAway)) {
-                settings.set(Settings.Key.phoneOnlyWhenAway, !settings.bool(Settings.Key.phoneOnlyWhenAway))
-            })
-            submenu.addItem(action("Send test notification") { phone.sendTest() })
-            submenu.addItem(action("Show topic…") { phone.showSetup() })
+        menu.addItem(toggle("iPhone indicator", settings.bool(Settings.Key.phoneBeacon)) {
+            settings.set(Settings.Key.phoneBeacon, !settings.bool(Settings.Key.phoneBeacon))
+        })
+        if settings.bool(Settings.Key.phoneBeacon) {
+            let info = NSMenuItem(title: "    \(beacon.statusDescription)", action: nil, keyEquivalent: "")
+            info.isEnabled = false
+            menu.addItem(info)
         }
-        let item = NSMenuItem(title: "iPhone notifications", action: nil, keyEquivalent: "")
-        item.submenu = submenu
-        menu.addItem(item)
     }
 
     private func action(_ title: String, _ handler: @escaping () -> Void) -> NSMenuItem {

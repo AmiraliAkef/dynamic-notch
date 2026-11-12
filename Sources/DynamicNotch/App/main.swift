@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         BatteryMonitor.shared.start()
         BluetoothMonitor.shared.start()
         CaffeinateController.shared.start()
-        PhoneNotifier.shared.start()
+        StatusBeacon.shared.start()
 
         NotificationCenter.default.addObserver(forName: .settingsChanged, object: nil, queue: .main) { note in
             MainActor.assumeIsolated { Self.settingChanged(note.object as? String) }

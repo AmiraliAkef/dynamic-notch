@@ -61,4 +61,6 @@ cat > $ICON/icon.json <<'JSON'
   "supported-platforms" : { "squares" : [ "macOS" ] }
 }
 JSON
-echo "Wrote $ICON"
+# The iPhone app uses the same full-bleed artwork (iOS masks it itself).
+cp $ICON/Assets/*.png iOS/App/Assets.xcassets/AppIcon.appiconset/
+echo "Wrote $ICON and the iOS app icon"

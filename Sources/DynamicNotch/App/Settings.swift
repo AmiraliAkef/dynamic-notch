@@ -24,8 +24,7 @@ final class Settings: ObservableObject {
             Key.splitActivities: true,
             Key.caffeinateDuration: CaffeinateController.indefinitely,
             Key.caffeinateMinBattery: 20,
-            Key.phoneEnabled: false,
-            Key.phoneOnlyWhenAway: true,
+            Key.phoneBeacon: true,
         ])
     }
 
@@ -45,10 +44,7 @@ final class Settings: ObservableObject {
         static let splitActivities = "splitActivities"
         static let caffeinateDuration = "caffeinate.duration"
         static let caffeinateMinBattery = "caffeinate.minBattery"
-        static let phoneEnabled = "phone.enabled"
-        static let phoneOnlyWhenAway = "phone.onlyWhenAway"
-        static let phoneTopic = "phone.topic"
-        static let phoneServer = "phone.server"
+        static let phoneBeacon = "phone.beacon"
     }
 
     func bool(_ key: String) -> Bool { defaults.bool(forKey: key) }
