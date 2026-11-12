@@ -86,12 +86,7 @@ private struct StatusCluster: View {
         HStack(spacing: 8) {
             CaffeinateButton()
             if let state = battery.state {
-                HStack(spacing: 3) {
-                    Text("\(state.percent)%").font(.system(size: 11, weight: .medium).monospacedDigit())
-                    Image(systemName: state.symbol).font(.system(size: 13))
-                        .foregroundStyle(state.onAC ? .green : (state.percent <= 20 ? .red : .white))
-                }
-                .foregroundStyle(.white.opacity(0.75))
+                BatteryGlyph(state: state)
             }
             TimelineView(.everyMinute) { context in
                 Text(context.date, format: .dateTime.hour().minute())
@@ -99,6 +94,50 @@ private struct StatusCluster: View {
                     .foregroundStyle(.white.opacity(0.75))
             }
         }
+    }
+}
+
+/// iOS-style battery: the level fills the body and the percentage is cut out
+/// of it, so the number reads in the notch's black.
+private struct BatteryGlyph: View {
+    var state: BatteryState
+    private let size = CGSize(width: 25, height: 12)
+
+    private var fill: Color {
+        if state.onAC { return .green }
+        if ProcessInfo.processInfo.isLowPowerModeEnabled { return .yellow }
+        return state.percent <= 20 ? .red : .white
+    }
+
+    var body: some View {
+        let level = CGFloat(min(max(state.percent, 0), 100)) / 100
+        let body = RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+        HStack(spacing: 1.5) {
+            ZStack(alignment: .leading) {
+                body.fill(.white.opacity(0.35))
+                Rectangle().fill(fill).frame(width: size.width * level)
+                Text("\(state.percent)")
+                    .font(.system(size: 9.5, weight: .bold, design: .rounded).monospacedDigit())
+                    .frame(width: size.width)
+                    .blendMode(.destinationOut)
+            }
+            .frame(width: size.width, height: size.height)
+            .clipShape(body)
+            .compositingGroup()
+
+            UnevenRoundedRectangle(bottomTrailingRadius: 1.5, topTrailingRadius: 1.5)
+                .fill(state.percent >= 100 ? fill : .white.opacity(0.35))
+                .frame(width: 1.5, height: 4)
+
+            if state.onAC {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.85))
+            }
+        }
+        .help(state.onAC ? "\(state.percent)% · Charging" : "\(state.percent)%")
+        .accessibilityElement()
+        .accessibilityLabel("Battery \(state.percent) percent\(state.onAC ? ", charging" : "")")
     }
 }
 
