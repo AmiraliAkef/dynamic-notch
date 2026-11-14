@@ -32,7 +32,7 @@ final class SocketServer {
                 bind(listenFD, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
-        guard bound == 0, listen(listenFD, 16) == 0 else {
+        guard bound == 0, listen(listenFD, 128) == 0 else {
             close(listenFD)
             throw POSIXError(.init(rawValue: errno) ?? .EIO)
         }
@@ -55,6 +55,10 @@ final class SocketServer {
         while true {
             let client = accept(listenFD, nil, nil)
             guard client >= 0 else { return }
+            // Accepted sockets inherit O_NONBLOCK from the listener on macOS; a
+            // non-blocking read can run before the client's write arrives and
+            // drop the message, so read with a blocking socket (and a timeout).
+            _ = fcntl(client, F_SETFL, fcntl(client, F_GETFL) & ~O_NONBLOCK)
             var noSigPipe: Int32 = 1
             setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
             var timeout = timeval(tv_sec: 2, tv_usec: 0)

@@ -78,19 +78,15 @@ private struct TabButton: View {
     }
 }
 
-/// Battery and clock in the top-right corner.
+/// Caffeinated mode toggle, battery and clock in the top-right corner.
 private struct StatusCluster: View {
     @ObservedObject private var battery = BatteryMonitor.shared
 
     var body: some View {
         HStack(spacing: 8) {
+            CaffeinateButton()
             if let state = battery.state {
-                HStack(spacing: 3) {
-                    Text("\(state.percent)%").font(.system(size: 11, weight: .medium).monospacedDigit())
-                    Image(systemName: state.symbol).font(.system(size: 13))
-                        .foregroundStyle(state.onAC ? .green : (state.percent <= 20 ? .red : .white))
-                }
-                .foregroundStyle(.white.opacity(0.75))
+                BatteryGlyph(state: state)
             }
             TimelineView(.everyMinute) { context in
                 Text(context.date, format: .dateTime.hour().minute())
@@ -98,6 +94,77 @@ private struct StatusCluster: View {
                     .foregroundStyle(.white.opacity(0.75))
             }
         }
+    }
+}
+
+/// iOS-style battery: the level fills the body and the percentage is cut out
+/// of it, so the number reads in the notch's black.
+private struct BatteryGlyph: View {
+    var state: BatteryState
+    private let size = CGSize(width: 27, height: 12.5)
+
+    private var fill: Color {
+        if state.onAC { return .green }
+        if ProcessInfo.processInfo.isLowPowerModeEnabled { return .yellow }
+        return state.percent <= 20 ? .red : .white
+    }
+
+    var body: some View {
+        let level = CGFloat(min(max(state.percent, 0), 100)) / 100
+        let body = RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+        HStack(spacing: 1.5) {
+            ZStack(alignment: .leading) {
+                body.fill(.white.opacity(0.35))
+                Rectangle().fill(fill).frame(width: size.width * level)
+                // The number (and the charging bolt beside it, like iOS) is cut out of the fill.
+                HStack(spacing: 0.5) {
+                    Text("\(state.percent)")
+                        .font(.system(size: state.onAC && state.percent >= 100 ? 8.5 : 9.5,
+                                      weight: .bold, design: .rounded).monospacedDigit())
+                    if state.onAC {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 7, weight: .heavy))
+                    }
+                }
+                .fixedSize()
+                .frame(width: size.width)
+                .blendMode(.destinationOut)
+            }
+            .frame(width: size.width, height: size.height)
+            .clipShape(body)
+            .compositingGroup()
+
+            UnevenRoundedRectangle(bottomTrailingRadius: 1.5, topTrailingRadius: 1.5)
+                .fill(state.percent >= 100 ? fill : .white.opacity(0.35))
+                .frame(width: 1.5, height: 4)
+        }
+        .fixedSize()
+        .help(state.onAC ? "\(state.percent)% · Charging" : "\(state.percent)%")
+        .accessibilityElement()
+        .accessibilityLabel("Battery \(state.percent) percent\(state.onAC ? ", charging" : "")")
+    }
+}
+
+/// Keeps the Mac awake with the lid closed so agents keep working.
+private struct CaffeinateButton: View {
+    @ObservedObject private var caffeinate = CaffeinateController.shared
+    @State private var hovering = false
+
+    var body: some View {
+        Button { caffeinate.toggle() } label: {
+            Image(systemName: caffeinate.isOn ? "cup.and.saucer.fill" : "cup.and.saucer")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(caffeinate.isOn ? .orange : .white.opacity(hovering ? 0.8 : 0.5))
+                .frame(width: 26, height: 20)
+                .background(Capsule().fill(caffeinate.isOn ? .orange.opacity(0.2) : .white.opacity(hovering ? 0.08 : 0)))
+                .contentShape(Capsule())
+                .opacity(caffeinate.isBusy ? 0.5 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(caffeinate.isBusy)
+        .help(caffeinate.isOn ? "Caffeinated: stays awake with the lid closed. Click to turn off."
+                              : "Caffeinated mode: keep working with the lid closed")
+        .onHover { hovering = $0 }
     }
 }
 

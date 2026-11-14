@@ -22,6 +22,9 @@ final class Settings: ObservableObject {
             Key.terminalThreshold: 10.0,
             Key.liveVisualizer: true,
             Key.splitActivities: true,
+            Key.caffeinateDuration: CaffeinateController.indefinitely,
+            Key.caffeinateMinBattery: 20,
+            Key.phoneBeacon: true,
         ])
     }
 
@@ -39,13 +42,19 @@ final class Settings: ObservableObject {
         static let terminalThreshold = "terminalThreshold"
         static let liveVisualizer = "liveVisualizer"
         static let splitActivities = "splitActivities"
+        static let caffeinateDuration = "caffeinate.duration"
+        static let caffeinateMinBattery = "caffeinate.minBattery"
+        static let phoneBeacon = "phone.beacon"
     }
 
     func bool(_ key: String) -> Bool { defaults.bool(forKey: key) }
 
-    func set(_ key: String, _ value: Any) {
+    func string(_ key: String) -> String? { defaults.string(forKey: key) }
+
+    /// A nil value removes the key (back to its registered default).
+    func set(_ key: String, _ value: Any?) {
         objectWillChange.send()
-        defaults.set(value, forKey: key)
+        if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
         NotificationCenter.default.post(name: .settingsChanged, object: key)
     }
 
@@ -53,6 +62,8 @@ final class Settings: ObservableObject {
     var hoverDelay: Double { defaults.double(forKey: Key.hoverDelay) }
     var bannersEnabled: Bool { bool(Key.banners) }
     var terminalThreshold: Double { defaults.double(forKey: Key.terminalThreshold) }
+    var caffeinateDuration: Double { defaults.double(forKey: Key.caffeinateDuration) }
+    var caffeinateMinBattery: Int { defaults.integer(forKey: Key.caffeinateMinBattery) }
 }
 
 extension Notification.Name {

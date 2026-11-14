@@ -15,6 +15,18 @@ mkdir -p $APP/Contents/MacOS $APP/Contents/Resources
 cp $BIN/DynamicNotch $BIN/notch $APP/Contents/MacOS/
 cp hooks/notch.zsh $APP/Contents/Resources/
 
+# App icon. macOS 26+ reads the Icon Composer icon (default, dark and tinted
+# appearances) from Assets.car; older systems use the classic .icns made from
+# the hand-drawn icon set. Regenerate the .icon with scripts/make-app-icon.sh.
+ICONWORK=$(mktemp -d)
+xcrun actool $PWD/Resources/AppIcon.icon --compile $ICONWORK --platform macosx --minimum-deployment-target 14.0 \
+  --app-icon AppIcon --include-all-app-icons --output-partial-info-plist $ICONWORK/partial.plist >/dev/null
+cp $ICONWORK/Assets.car $APP/Contents/Resources/
+cp -R DynamicNotchIcons/AppIcon.appiconset $ICONWORK/AppIcon.iconset
+rm -f $ICONWORK/AppIcon.iconset/Contents.json
+iconutil -c icns $ICONWORK/AppIcon.iconset -o $APP/Contents/Resources/AppIcon.icns
+rm -rf $ICONWORK
+
 # The Now Playing helper runs inside /usr/bin/perl (arm64e), so build it for both.
 clang -dynamiclib -fobjc-arc -O2 -arch arm64 -arch arm64e -mmacosx-version-min=14.0 \
   -framework Foundation Helper/MediaRemoteHelper.m -o $APP/Contents/Resources/MediaRemoteHelper.dylib
@@ -28,6 +40,8 @@ cat > $APP/Contents/Info.plist <<PLIST
   <key>CFBundleName</key><string>Dynamic Notch</string>
   <key>CFBundleDisplayName</key><string>Dynamic Notch</string>
   <key>CFBundleExecutable</key><string>DynamicNotch</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleIconName</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundleVersion</key><string>1</string>
