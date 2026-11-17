@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import SwiftUI
 
 /// Menu bar icon with settings, setup and demo actions.
 @MainActor
@@ -107,6 +108,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         let demo = NSMenu()
+        let showcase = action(Demo.isShowcasing ? "Showcase running…" : "Showcase everything") { Demo.showcase() }
+        showcase.isEnabled = !Demo.isShowcasing
+        demo.addItem(showcase)
+        demo.addItem(.separator())
         demo.addItem(action("1-minute timer") { TimerStore.shared.start(duration: 60, label: "Demo timer") })
         demo.addItem(action("10-second timer") { TimerStore.shared.start(duration: 10) })
         demo.addItem(action("Claude Code session") { Demo.claude() })
@@ -215,6 +220,94 @@ enum Demo {
                 try? await Task.sleep(for: .seconds(delay))
                 MessageRouter.handle(base.merging(step) { $1 })
             }
+        }
+    }
+
+    private static var showcaseTask: Task<Void, Never>?
+    static var isShowcasing: Bool { showcaseTask != nil }
+
+    /// Everything at once, for showing the app off: music, two Claude sessions
+    /// (one asking for permission, which also reaches the iPhone), a timer, a
+    /// long build, system banners and the expanded notch. About a minute long.
+    /// Nothing real changes: Caffeinated mode, the battery and Bluetooth
+    /// only appear as banners.
+    static func showcase() {
+        guard showcaseTask == nil else { return }
+        showcaseTask = Task { @MainActor in
+            defer { showcaseTask = nil }
+            let model = NotchModel.shared
+            let web = "showcase-web-\(Int.random(in: 1000...9999))"
+            let api = "showcase-api-\(Int.random(in: 1000...9999))"
+            @MainActor func claude(_ session: String, _ project: String, _ step: [String: Any]) {
+                let base: [String: Any] = ["kind": "claude", "session": session, "hostBundle": "com.apple.Terminal",
+                                           "cwd": NSHomeDirectory() + "/" + project]
+                MessageRouter.handle(base.merging(step) { $1 })
+            }
+            func wait(_ seconds: Double) async { try? await Task.sleep(for: .seconds(seconds)) }
+
+            model.show(Banner(icon: .symbol("sparkles"), tint: .yellow, title: "Dynamic Notch",
+                              subtitle: "Here's everything it does", duration: 3))
+            await wait(2)
+
+            // Music, then a Claude session beside it (split mode).
+            let playedMusic = NowPlayingStore.shared.startDemo()
+            await wait(3)
+            claude(web, "web-app", ["event": "UserPromptSubmit"])
+            claude(web, "web-app", ["event": "PreToolUse", "tool": "Edit"])
+            await wait(3)
+
+            // A timer and a long-running build.
+            TimerStore.shared.start(duration: 60, label: "Showcase")
+            await wait(2)
+            let pid = Int32.max - Int32.random(in: 0..<1000)
+            TerminalStore.shared.startDemo(pid: pid, command: "npm run build", ranFor: 14)
+            await wait(3)
+
+            // System banners.
+            if let battery = BatteryMonitor.shared.state {
+                model.show(Banner(icon: .symbol(battery.symbol), tint: battery.onAC ? .green : .white,
+                                  title: battery.onAC ? "Charging" : "On battery",
+                                  trailing: "\(battery.percent)%", duration: 2.5))
+                await wait(3)
+            }
+            model.show(Banner(icon: .symbol("airpodspro"), tint: .blue, title: "AirPods Pro",
+                              subtitle: "Connected", duration: 3))
+            await wait(3.5)
+
+            // A second session asks for permission; answer it on the iPhone.
+            claude(api, "api-server", ["event": "UserPromptSubmit"])
+            claude(api, "api-server", ["event": "PreToolUse", "tool": "Bash"])
+            PermissionStore.shared.addDemo(session: api, project: "api-server", tool: "Bash",
+                                           detail: "npm run migrate -- --env staging",
+                                           note: "Run the database migrations")
+            claude(api, "api-server", ["event": "Notification", "notificationType": "permission_prompt",
+                                       "message": "Claude needs your permission to use Bash"])
+            await wait(5.5)
+            model.show(Banner(icon: .symbol("cup.and.saucer.fill"), tint: .orange, title: "Caffeinated mode",
+                              subtitle: "Keeps working with the lid closed", duration: 3))
+            await wait(3.5)
+
+            // Open the notch on the Claude sessions.
+            withAnimation(NotchAnimation.open) { model.expand(tab: .claude) }
+            await wait(6)
+            withAnimation(NotchAnimation.close) { model.collapse() }
+            await wait(2)
+
+            // Wrap up: the build passes, both sessions finish.
+            TerminalStore.shared.finishDemo(pid: pid)
+            await wait(6)
+            PermissionStore.shared.answeredElsewhere(session: api)
+            claude(api, "api-server", ["event": "PostToolUse", "tool": "Bash"])
+            await wait(2)
+            claude(api, "api-server", ["event": "Stop"])
+            await wait(4.5)
+            claude(web, "web-app", ["event": "Stop"])
+            await wait(4.5)
+            if playedMusic { NowPlayingStore.shared.endDemo() }
+            for session in ClaudeStore.shared.sessions where session.id == web || session.id == api {
+                ClaudeStore.shared.forget(session)
+            }
+            // The timer keeps running and rings as the finale.
         }
     }
 

@@ -11,6 +11,7 @@ usage:
   notch timer pause|resume|cancel     control the most recent timer
   notch stopwatch start|stop|reset
   notch notify <title> [subtitle] [--icon <sf-symbol>] [--seconds <n>]
+  notch showcase                      show every feature at once (about a minute)
   notch claude-hook                   read a Claude Code hook event from stdin
   notch send '<json>'                 send a raw message
   notch ping                          exit 0 if the app is running
@@ -185,6 +186,9 @@ case "claude-hook":
         message["fingerprint"] = toolFingerprint(event)
     }
     send(message)
+
+case "showcase":
+    send(["kind": "showcase"])
 
 case "send":
     guard let json = args.first?.data(using: .utf8),

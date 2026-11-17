@@ -31,6 +31,8 @@ enum MessageRouter {
                                           title: message["title"] as? String ?? "",
                                           subtitle: message["subtitle"] as? String,
                                           duration: message["seconds"] as? Double ?? 4))
+        case "showcase":
+            Demo.showcase()
         case "expand":
             let tab = (message["tab"] as? String).flatMap(NotchTab.init(rawValue:))
             withAnimation(NotchAnimation.open) { NotchModel.shared.expand(tab: tab) }

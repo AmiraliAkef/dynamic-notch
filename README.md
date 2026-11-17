@@ -41,6 +41,7 @@ notch timer 25m Focus      # also 90s, 1h30m, 5:00
 notch timer pause|resume|cancel
 notch stopwatch start|stop|reset
 notch notify "Deploy finished" "api-server" --icon checkmark.circle.fill
+notch showcase             # every feature at once, for about a minute (also in Try it)
 ```
 
 ## How it works

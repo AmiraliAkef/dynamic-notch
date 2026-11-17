@@ -43,6 +43,8 @@ final class NowPlayingStore: ObservableObject {
     private var artworkKey: String?
     private var hideTask: Task<Void, Never>?
     private var restarts = 0
+    /// A made-up song from the showcase is showing.
+    private var isDemo = false
 
     private var model: NotchModel { .shared }
 
@@ -178,9 +180,58 @@ final class NowPlayingStore: ObservableObject {
         }
         artworkKey = key
 
+        // Keep the showcase song unless something real starts playing.
+        if isDemo {
+            guard next.hasContent else { return }
+            isDemo = false
+        }
         guard next != info else { return }
         info = next
         sync()
+    }
+
+    /// Showcase: pretends a song is playing. Does nothing when something real
+    /// is already playing. The equalizer uses its canned animation.
+    @discardableResult
+    func startDemo() -> Bool {
+        guard !info.hasContent else { return false }
+        var song = NowPlaying()
+        song.title = "Midnight Drive"
+        song.artist = "The Notches"
+        song.album = "Showcase"
+        song.duration = 214
+        song.elapsed = 37
+        song.timestamp = .now
+        song.isPlaying = true
+        song.artwork = Self.demoArtwork()
+        song.tint = Color(nsColor: .systemPink)
+        isDemo = true
+        hideTask?.cancel()
+        info = song
+        model.upsert(Activity(source: .media, priority: Priority.media))
+        return true
+    }
+
+    func endDemo() {
+        guard isDemo else { return }
+        isDemo = false
+        info = NowPlaying()
+        model.remove(.media)
+    }
+
+    private static func demoArtwork() -> NSImage {
+        NSImage(size: NSSize(width: 160, height: 160), flipped: false) { rect in
+            NSGradient(colors: [.systemPink, .systemPurple, .systemIndigo])?.draw(in: rect, angle: -50)
+            let config = NSImage.SymbolConfiguration(pointSize: 64, weight: .semibold)
+                .applying(.init(paletteColors: [.white]))
+            if let note = NSImage(systemSymbolName: "music.note", accessibilityDescription: nil)?
+                .withSymbolConfiguration(config) {
+                let size = note.size
+                note.draw(in: NSRect(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2,
+                                     width: size.width, height: size.height))
+            }
+            return true
+        }
     }
 
     private func sync() {
