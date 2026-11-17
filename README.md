@@ -1,5 +1,9 @@
 # Dynamic Notch
 
+[![Dynamic Notch: a Dynamic Island for your MacBook, that comes with you](docs/media/dynamic-notch-on-the-go.gif)](docs/media/dynamic-notch-on-the-go.mp4)
+
+▶ **[Watch it in full quality](docs/media/dynamic-notch-on-the-go.mp4)** (1 min): the notch, the iPhone Live Activity, and approving Claude Code from your pocket.
+
 A Dynamic Island for the MacBook notch. It lives around the camera notch and shows live activities:
 
 - **Now Playing**: album art and equalizer bars driven by the audio that's actually playing (a Core Audio tap plus an FFT). Hover to get controls and a seek bar. Works with Music, Spotify, browsers and anything else that reports to macOS Now Playing.
@@ -37,6 +41,7 @@ notch timer 25m Focus      # also 90s, 1h30m, 5:00
 notch timer pause|resume|cancel
 notch stopwatch start|stop|reset
 notch notify "Deploy finished" "api-server" --icon checkmark.circle.fill
+notch showcase             # every feature at once, for about a minute (also in Try it)
 ```
 
 ## How it works

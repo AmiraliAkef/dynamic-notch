@@ -45,6 +45,8 @@ final class TerminalStore: ObservableObject {
 
     @Published private(set) var sessions: [TerminalSession] = []
     private var ticker: Timer?
+    /// Fake shells from the "Try it" menu, which the liveness check must keep.
+    private var demoPids: Set<Int32> = []
 
     private var model: NotchModel { .shared }
     private var threshold: TimeInterval { Settings.shared.terminalThreshold }
@@ -156,8 +158,21 @@ final class TerminalStore: ObservableObject {
                           shakes: !ok))
     }
 
+    /// Used by the showcase: a command that has been running for `ranFor`
+    /// seconds, so it shows in the notch right away.
+    func startDemo(pid: Int32, command: String, ranFor: TimeInterval) {
+        demoPids.insert(pid)
+        handle(["event": "start", "pid": Int(pid), "command": command, "hostBundle": "com.apple.Terminal",
+                "cwd": NSHomeDirectory() + "/web-app"])
+        guard let index = sessions.firstIndex(where: { $0.pid == pid }) else { return }
+        sessions[index].start = .now - ranFor - 240
+        sessions[index].current?.start = .now - ranFor
+        sync()
+    }
+
     /// Used by the "Try it" menu: ends a session's command as if it ran for 83 seconds.
     func finishDemo(pid: Int32) {
+        defer { demoPids.remove(pid) }
         guard let index = sessions.firstIndex(where: { $0.pid == pid }) else { return }
         sessions[index].current?.start = .now - 83
         handle(["event": "end", "pid": Int(pid), "exit": 0])
@@ -186,7 +201,7 @@ final class TerminalStore: ObservableObject {
 
     private func tick() {
         // Shells killed without running zshexit (window closed, crash) never say goodbye.
-        sessions.removeAll { kill($0.pid, 0) != 0 && errno == ESRCH }
+        sessions.removeAll { !demoPids.contains($0.pid) && kill($0.pid, 0) != 0 && errno == ESRCH }
         sync()
     }
 

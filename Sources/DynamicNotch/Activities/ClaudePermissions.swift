@@ -22,7 +22,8 @@ final class PermissionStore: ObservableObject {
         let session: String
         /// Identifies the tool call, to match its PostToolUse event.
         let fingerprint: String?
-        let reply: SocketReply
+        /// The waiting hook; nil for the showcase's made-up request.
+        let reply: SocketReply?
     }
 
     /// Oldest first; the phone is shown the first one.
@@ -62,14 +63,25 @@ final class PermissionStore: ObservableObject {
         updateSweeper()
     }
 
+    /// Showcase: a request with no hook behind it. It still reaches the
+    /// iPhone, and answering it there shows the usual banner.
+    func addDemo(session: String, project: String, tool: String, detail: String, note: String?) {
+        let id = nextID
+        nextID = nextID &+ 1 == 0 ? 1 : nextID &+ 1
+        requests.append(Request(prompt: PermissionPrompt(id: id, project: project, tool: tool, detail: detail,
+                                                         note: note, canAlwaysAllow: true),
+                                session: session, fingerprint: nil, reply: nil))
+        updateSweeper()
+    }
+
     /// Answers a request from the phone. False if it's gone already
     /// (answered in the terminal, or the hook gave up).
     func answer(id: UInt32, with decision: PermissionDecision) -> Bool {
-        guard let request = requests.first(where: { $0.prompt.id == id }), request.reply.isOpen else {
+        guard let request = requests.first(where: { $0.prompt.id == id }), request.reply?.isOpen ?? true else {
             remove(id: id)
             return false
         }
-        request.reply.send(["decision": decision.rawValue])
+        request.reply?.send(["decision": decision.rawValue])
         remove(id: id)
         log.notice("Request \(id, privacy: .public) answered from the iPhone: \(decision.rawValue, privacy: .public)")
         let allowed = decision != .deny
@@ -89,7 +101,7 @@ final class PermissionStore: ObservableObject {
         }
         guard !done.isEmpty else { return }
         for request in done {
-            request.reply.close()
+            request.reply?.close()
         }
         let ids = Set(done.map(\.prompt.id))
         requests.removeAll { ids.contains($0.prompt.id) }
@@ -98,13 +110,13 @@ final class PermissionStore: ObservableObject {
 
     private func remove(id: UInt32) {
         guard let index = requests.firstIndex(where: { $0.prompt.id == id }) else { return }
-        requests.remove(at: index).reply.close()
+        requests.remove(at: index).reply?.close()
         updateSweeper()
     }
 
     /// Drops requests whose hook has certainly given up.
     private func sweep() {
-        let expired = requests.filter { Date.now.timeIntervalSince($0.prompt.since) > Self.maxWait + 5 || !$0.reply.isOpen }
+        let expired = requests.filter { Date.now.timeIntervalSince($0.prompt.since) > Self.maxWait + 5 || $0.reply?.isOpen == false }
         for request in expired { remove(id: request.prompt.id) }
     }
 
