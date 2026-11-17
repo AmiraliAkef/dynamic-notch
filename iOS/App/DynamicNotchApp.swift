@@ -9,6 +9,13 @@ struct DynamicNotchApp: App {
         // Bluetooth event (state restoration).
         MacLink.shared.start()
         CaffeinateRemote.handler = { on in try await MacLink.shared.setCaffeinated(on) }
+        PermissionRemote.handler = { id, decision in
+            do {
+                try await MacLink.shared.answer(id, with: decision)
+            } catch MacLink.CommandError.alreadyAnswered {
+                // Nothing left to do; the request is gone from the Lock Screen.
+            }
+        }
     }
 
     var body: some Scene {

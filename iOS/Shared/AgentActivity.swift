@@ -10,6 +10,8 @@ struct AgentActivityAttributes: ActivityAttributes {
         var connected: Bool
         /// When the phone last heard from the Mac.
         var updatedAt: Date
+        /// The Claude Code permission request to answer, if any.
+        var prompt: PermissionPrompt? = nil
     }
 }
 
@@ -21,7 +23,7 @@ enum Indicator {
     init(_ state: AgentActivityAttributes.ContentState, isStale: Bool = false) {
         if !state.connected || isStale {
             self = .offline
-        } else if state.status.waitingCount > 0 {
+        } else if state.status.waitingCount > 0 || state.prompt != nil {
             self = .waiting
         } else if state.status.isBusy {
             self = .working
@@ -59,6 +61,21 @@ extension AgentActivityAttributes.ContentState {
     static let placeholder = Self(status: .idle, connected: false, updatedAt: .now)
 
     func headline(isStale: Bool) -> String {
-        !connected || isStale ? "Mac out of range" : status.headline
+        if !connected || isStale { return "Mac out of range" }
+        if let prompt { return "\(prompt.project) needs permission" }
+        return status.headline
     }
+
+    /// The request to show, if it can still be answered from here.
+    func answerablePrompt(isStale: Bool) -> PermissionPrompt? {
+        connected && !isStale ? prompt : nil
+    }
+
+    /// Requests waiting besides the one shown.
+    var morePrompts: Int { max(0, (status.pendingRequests ?? 0) - 1) }
+}
+
+extension Color {
+    /// Claude's orange, for the Allow button.
+    static let claude = Color(red: 0.85, green: 0.47, blue: 0.34)
 }

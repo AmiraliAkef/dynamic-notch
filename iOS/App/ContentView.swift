@@ -5,7 +5,8 @@ struct ContentView: View {
     @EnvironmentObject private var activity: LiveActivityController
 
     private var state: AgentActivityAttributes.ContentState {
-        .init(status: link.status ?? .idle, connected: link.isConnected, updatedAt: link.updatedAt ?? .now)
+        .init(status: link.status ?? .idle, connected: link.isConnected, updatedAt: link.updatedAt ?? .now,
+              prompt: link.prompt)
     }
 
     var body: some View {
@@ -24,6 +25,10 @@ struct ContentView: View {
                         Label("On the Mac, open the Dynamic Notch menu and choose **Pair iPhone…**", systemImage: "1.circle")
                         Label("Point this iPhone's Camera at the code and tap the link", systemImage: "2.circle")
                     }
+                }
+
+                if let prompt = link.prompt, link.isConnected {
+                    PermissionSection(prompt: prompt, more: state.morePrompts)
                 }
 
                 if let status = link.status, link.isConnected {
@@ -78,7 +83,7 @@ struct ContentView: View {
         HStack(spacing: 14) {
             IndicatorDot(indicator: Indicator(state), size: 14)
             VStack(alignment: .leading, spacing: 3) {
-                Text(link.isConnected ? state.status.headline : connectionTitle)
+                Text(link.isConnected ? state.headline(isStale: false) : connectionTitle)
                     .font(.headline)
                 Text(connectionDetail)
                     .font(.subheadline)
@@ -134,6 +139,99 @@ struct AgentRow: View {
             Text(agent.since, style: .timer)
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// A Claude Code permission request, in full, with Deny / Allow and (when
+/// Claude Code suggested a rule) "Always allow".
+struct PermissionSection: View {
+    var prompt: PermissionPrompt
+    var more: Int
+    @EnvironmentObject private var link: MacLink
+    @State private var sending: PermissionDecision?
+    @State private var error: String?
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: prompt.symbol)
+                        .foregroundStyle(Color.claude)
+                    Text(prompt.title).font(.headline)
+                    Spacer()
+                    Text(prompt.since, style: .relative)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if let note = prompt.note {
+                    Text(note).font(.subheadline).foregroundStyle(.secondary)
+                }
+                if !prompt.detail.isEmpty {
+                    ScrollView {
+                        Text(prompt.detail)
+                            .font(.system(.footnote, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 160)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(10)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color(.tertiarySystemFill)))
+                }
+                if let error {
+                    Label(error, systemImage: "exclamationmark.triangle")
+                        .font(.footnote).foregroundStyle(.orange)
+                }
+                HStack(spacing: 10) {
+                    Button(role: .destructive) { answer(.deny) } label: {
+                        label("Deny", for: .deny).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    Button { answer(.allow) } label: {
+                        label("Allow", for: .allow).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.claude)
+                }
+                .controlSize(.large)
+                if prompt.canAlwaysAllow {
+                    Button { answer(.always) } label: {
+                        label("Always allow in \(prompt.project)", for: .always).frame(maxWidth: .infinity)
+                    }
+                    .font(.subheadline)
+                    .tint(Color.claude)
+                }
+            }
+            .buttonStyle(.borderless)
+            .disabled(sending != nil)
+            .padding(.vertical, 4)
+        } header: {
+            Text(more > 0 ? "\(prompt.project) needs permission · \(more) more waiting" : "\(prompt.project) needs permission")
+        } footer: {
+            Text("You can also answer in the terminal on your Mac.")
+        }
+        .id(prompt.id)
+    }
+
+    @ViewBuilder private func label(_ title: String, for decision: PermissionDecision) -> some View {
+        if sending == decision {
+            ProgressView()
+        } else {
+            Text(title).fontWeight(decision == .always ? .regular : .semibold)
+        }
+    }
+
+    private func answer(_ decision: PermissionDecision) {
+        sending = decision
+        error = nil
+        Task {
+            do {
+                try await link.answer(prompt.id, with: decision)
+            } catch {
+                self.error = error.localizedDescription
+            }
+            sending = nil
         }
     }
 }

@@ -24,6 +24,40 @@ struct SetCaffeinatedIntent: LiveActivityIntent {
     }
 }
 
+/// Allow / Deny on a Claude Code permission request, from the Lock Screen or
+/// the Dynamic Island. Runs in the app's process, like the ☕ button.
+struct AnswerPermissionIntent: LiveActivityIntent {
+    static let title: LocalizedStringResource = "Answer Permission Request"
+    static let description = IntentDescription("Allows or denies what Claude Code asked to do on your Mac.")
+
+    @Parameter(title: "Request")
+    var request: Int
+
+    @Parameter(title: "Allow")
+    var allow: Bool
+
+    init() {}
+
+    init(request: UInt32, allow: Bool) {
+        self.request = Int(request)
+        self.allow = allow
+    }
+
+    func perform() async throws -> some IntentResult {
+        try await PermissionRemote.answer(UInt32(request), allow ? .allow : .deny)
+        return .result()
+    }
+}
+
+/// Bridges the permission intent to the app's MacLink.
+enum PermissionRemote {
+    @MainActor static var handler: ((UInt32, PermissionDecision) async throws -> Void)?
+
+    @MainActor static func answer(_ id: UInt32, _ decision: PermissionDecision) async throws {
+        try await handler?(id, decision)
+    }
+}
+
 /// Bridges the intent to the app's MacLink; the widget extension never sets it.
 enum CaffeinateRemote {
     @MainActor static var handler: ((Bool) async throws -> Void)?

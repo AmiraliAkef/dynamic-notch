@@ -43,7 +43,7 @@ final class LiveActivityController: ObservableObject {
 
         if let status = MacLink.shared.status {
             lastState = .init(status: status, connected: MacLink.shared.isConnected,
-                              updatedAt: MacLink.shared.updatedAt ?? .now)
+                              updatedAt: MacLink.shared.updatedAt ?? .now, prompt: MacLink.shared.prompt)
         }
         do {
             let started = try Activity.request(attributes: AgentActivityAttributes(),
@@ -54,11 +54,21 @@ final class LiveActivityController: ObservableObject {
         }
     }
 
-    func update(status: AgentStatus, connected: Bool) {
-        lastState = .init(status: status, connected: connected, updatedAt: connected ? .now : lastState.updatedAt)
+    /// With `alert`, the update lights up the screen and expands the Dynamic
+    /// Island, for a new permission request.
+    func update(status: AgentStatus, prompt: PermissionPrompt?, connected: Bool, alert: PermissionPrompt? = nil) {
+        lastState = .init(status: status, connected: connected, updatedAt: connected ? .now : lastState.updatedAt,
+                          prompt: prompt)
         guard let activity else { return }
         let content = content(for: lastState)
-        Task { await activity.update(content) }
+        if let alert {
+            let configuration = AlertConfiguration(title: "\(alert.project) needs permission",
+                                                   body: "\(alert.title): \(String(alert.detail.prefix(80)))",
+                                                   sound: .default)
+            Task { await activity.update(content, alertConfiguration: configuration) }
+        } else {
+            Task { await activity.update(content) }
+        }
     }
 
     func end() {
@@ -74,7 +84,7 @@ final class LiveActivityController: ObservableObject {
     private func content(for state: AgentActivityAttributes.ContentState) -> ActivityContent<AgentActivityAttributes.ContentState> {
         ActivityContent(state: state,
                         staleDate: state.connected ? Date.now.addingTimeInterval(AgentLink.staleAfter) : nil,
-                        relevanceScore: state.status.waitingCount > 0 ? 100 : (state.status.isBusy ? 50 : 0))
+                        relevanceScore: state.prompt != nil || state.status.waitingCount > 0 ? 100 : (state.status.isBusy ? 50 : 0))
     }
 
     private func track(_ activity: Activity<AgentActivityAttributes>) {

@@ -27,11 +27,18 @@ final class MacLink: NSObject, ObservableObject {
     @Published private(set) var updatedAt: Date?
     @Published private(set) var macName: String? = UserDefaults.standard.string(forKey: "pairedMacName")
     @Published private(set) var lastError: String?
+    /// The permission request Claude Code is waiting on, once it's been read.
+    @Published private(set) var prompt: PermissionPrompt?
     var isPaired: Bool { key != nil }
 
     private var key = AgentLinkKey.load()
     private var statusCharacteristic: CBCharacteristic?
     private var commandCharacteristic: CBCharacteristic?
+    private var requestCharacteristic: CBCharacteristic?
+    /// The request id being read, so a status doesn't trigger a second read.
+    private var readingRequest: UInt32?
+    /// Requests already announced with a Live Activity alert.
+    private var alerted: Set<UInt32> = []
     private var pendingWrite: CheckedContinuation<Void, Error>?
     private var pendingWriteID = UUID()
 
@@ -41,6 +48,7 @@ final class MacLink: NSObject, ObservableObject {
     private static let serviceUUID = CBUUID(string: AgentLink.serviceUUID)
     private static let statusUUID = CBUUID(string: AgentLink.statusUUID)
     private static let commandUUID = CBUUID(string: AgentLink.commandUUID)
+    private static let requestUUID = CBUUID(string: AgentLink.requestUUID)
     private static let knownMacKey = "knownMac"
 
     func start() {
@@ -49,9 +57,14 @@ final class MacLink: NSObject, ObservableObject {
         // For screenshots in the Simulator, which has no Bluetooth.
         if ProcessInfo.processInfo.arguments.contains("-demoStatus") {
             macName = "MacBook Pro"
-            apply(AgentStatus(agents: [.init(project: "dynamic_notch", state: .working, since: .now.addingTimeInterval(-342)),
-                                          .init(project: "api-server", state: .working, since: .now.addingTimeInterval(-75))],
-                                 caffeinated: true, canCaffeinate: true, battery: 64, charging: false))
+            prompt = PermissionPrompt(id: 7, project: "api-server", tool: "Bash",
+                                      detail: "rm -rf node_modules && npm install",
+                                      note: "Reinstall dependencies", canAlwaysAllow: true,
+                                      since: .now.addingTimeInterval(-12))
+            apply(AgentStatus(agents: [.init(project: "api-server", state: .waiting, since: .now.addingTimeInterval(-12)),
+                                          .init(project: "dynamic_notch", state: .working, since: .now.addingTimeInterval(-342))],
+                                 caffeinated: true, canCaffeinate: true, battery: 64, charging: false,
+                                 pendingRequest: 7, pendingRequests: 1))
             return
         }
         #endif
@@ -65,6 +78,7 @@ final class MacLink: NSObject, ObservableObject {
         peripheral = nil
         statusCharacteristic = nil
         commandCharacteristic = nil
+        requestCharacteristic = nil
         UserDefaults.standard.removeObject(forKey: Self.knownMacKey)
         findMac()
     }
@@ -72,11 +86,12 @@ final class MacLink: NSObject, ObservableObject {
     var isConnected: Bool { connection == .connected }
 
     enum CommandError: LocalizedError {
-        case notConnected, notPaired, rejected(String), busy
+        case notConnected, notPaired, rejected(String), busy, alreadyAnswered
 
         var errorDescription: String? {
             switch self {
             case .notConnected: "Your Mac isn't connected."
+            case .alreadyAnswered: "Already answered on your Mac."
             case .notPaired: "Pair with your Mac first."
             case .rejected(let reason): reason
             case .busy: "Another command is still being sent."
@@ -87,6 +102,37 @@ final class MacLink: NSObject, ObservableObject {
     /// Turns Caffeinated mode on the Mac on or off. Waits a few seconds for
     /// the link when the app was just launched in the background for this.
     func setCaffeinated(_ on: Bool) async throws {
+        try await send(AgentCommand(action: .caffeinate, on: on))
+        // Show the change right away; the Mac's next status confirms it.
+        if var status {
+            status.caffeinated = on
+            apply(status)
+        }
+    }
+
+    /// Answers a Claude Code permission request. The request disappears
+    /// right away; the Mac's next status shows the next one, if any.
+    func answer(_ id: UInt32, with decision: PermissionDecision) async throws {
+        do {
+            try await send(AgentCommand(answering: id, with: decision))
+        } catch CommandError.alreadyAnswered {
+            dropRequest(id)
+            throw CommandError.alreadyAnswered
+        }
+        dropRequest(id)
+    }
+
+    private func dropRequest(_ id: UInt32) {
+        if prompt?.id == id { prompt = nil }
+        guard var status, status.pendingRequest == id else { return }
+        status.pendingRequest = nil
+        status.pendingRequests = (status.pendingRequests ?? 1) > 1 ? status.pendingRequests! - 1 : nil
+        apply(status)
+    }
+
+    /// Writes a sealed command. Waits a few seconds for the link when the app
+    /// was just launched in the background for this (a Live Activity button).
+    private func send(_ command: AgentCommand) async throws {
         guard let key else { throw CommandError.notPaired }
         for _ in 0..<40 where commandCharacteristic == nil || peripheral?.state != .connected {
             try await Task.sleep(for: .milliseconds(250))
@@ -95,7 +141,7 @@ final class MacLink: NSObject, ObservableObject {
             throw CommandError.notConnected
         }
         guard pendingWrite == nil else { throw CommandError.busy }
-        guard let data = AgentCommand(action: .caffeinate, on: on).sealed(key: key) else { throw CommandError.notPaired }
+        guard let data = command.sealed(key: key) else { throw CommandError.notPaired }
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             let id = UUID()
@@ -106,11 +152,6 @@ final class MacLink: NSObject, ObservableObject {
                 try? await Task.sleep(for: .seconds(5))
                 if self.pendingWriteID == id { self.finishWrite(CommandError.notConnected) }
             }
-        }
-        // Show the change right away; the Mac's next status confirms it.
-        if var status {
-            status.caffeinated = on
-            apply(status)
         }
     }
 
@@ -186,14 +227,52 @@ final class MacLink: NSObject, ObservableObject {
         self.status = status
         updatedAt = .now
         connection = .connected
-        LiveActivityController.shared.update(status: status, connected: true)
+        if let id = status.pendingRequest {
+            if prompt?.id != id {
+                prompt = nil
+                readRequest(id)
+            }
+        } else {
+            prompt = nil
+        }
+        updateActivity(connected: true)
+    }
+
+    private func updateActivity(connected: Bool) {
+        guard let status else { return }
+        var alert: PermissionPrompt?
+        if connected, let prompt, !alerted.contains(prompt.id) {
+            alerted.insert(prompt.id)
+            alert = prompt
+        }
+        LiveActivityController.shared.update(status: status, prompt: prompt, connected: connected, alert: alert)
+    }
+
+    /// Reads the details of a new permission request.
+    private func readRequest(_ id: UInt32) {
+        guard readingRequest != id, let peripheral, let requestCharacteristic, peripheral.state == .connected else { return }
+        readingRequest = id
+        peripheral.readValue(for: requestCharacteristic)
+    }
+
+    private func receivedRequest(_ data: Data) {
+        readingRequest = nil
+        guard let key, let status, let expected = status.pendingRequest else { return }
+        guard !data.isEmpty, let plain = AgentLink.open(data, key: key),
+              let prompt = PermissionPrompt.decode(plain) else { return }
+        // A newer request may have arrived while this one was being read.
+        guard prompt.id == expected else { return readRequest(expected) }
+        self.prompt = prompt
+        updateActivity(connected: true)
     }
 
     private func lostMac() {
         commandCharacteristic = nil
+        requestCharacteristic = nil
+        readingRequest = nil
         finishWrite(CommandError.notConnected)
         connection = .connecting
-        if let status { LiveActivityController.shared.update(status: status, connected: false) }
+        updateActivity(connected: false)
         findMac()
     }
 }
@@ -257,7 +336,7 @@ extension MacLink: CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         MainActor.assumeIsolated {
             guard let service = peripheral.services?.first(where: { $0.uuid == Self.serviceUUID }) else { return }
-            peripheral.discoverCharacteristics([Self.statusUUID, Self.commandUUID], for: service)
+            peripheral.discoverCharacteristics([Self.statusUUID, Self.commandUUID, Self.requestUUID], for: service)
         }
     }
 
@@ -265,6 +344,8 @@ extension MacLink: CBPeripheralDelegate {
                                 error: Error?) {
         MainActor.assumeIsolated {
             commandCharacteristic = service.characteristics?.first { $0.uuid == Self.commandUUID }
+            requestCharacteristic = service.characteristics?.first { $0.uuid == Self.requestUUID }
+            readingRequest = nil
             guard let characteristic = service.characteristics?.first(where: { $0.uuid == Self.statusUUID }) else { return }
             statusCharacteristic = characteristic
             if key == nil { connection = .notPaired }
@@ -276,6 +357,11 @@ extension MacLink: CBPeripheralDelegate {
     nonisolated func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic,
                                 error: Error?) {
         MainActor.assumeIsolated {
+            if characteristic.uuid == Self.requestUUID {
+                if error != nil { readingRequest = nil }
+                if let data = characteristic.value, error == nil { receivedRequest(data) }
+                return
+            }
             if let error {
                 lastError = error.localizedDescription
                 return
@@ -291,6 +377,7 @@ extension MacLink: CBPeripheralDelegate {
             guard let error else { return finishWrite(nil) }
             let reason: String
             switch (error as? CBATTError)?.code {
+            case .attributeNotFound: return finishWrite(CommandError.alreadyAnswered)
             case .requestNotSupported: reason = "Set up Caffeinated mode on the Mac first."
             case .insufficientAuthentication: reason = "The Mac's pairing key changed. Scan its code again."
             case .insufficientAuthorization: reason = "The Mac rejected the command. Check both clocks are set automatically."
@@ -312,6 +399,7 @@ extension MacLink: CBPeripheralDelegate {
             // Dynamic Notch restarted on the Mac: its service was re-added.
             statusCharacteristic = nil
             commandCharacteristic = nil
+            requestCharacteristic = nil
             peripheral.discoverServices([Self.serviceUUID])
         }
     }
