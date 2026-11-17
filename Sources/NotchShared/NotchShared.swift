@@ -22,13 +22,39 @@ public enum NotchClient {
     /// running; callers (shell hooks) should stay silent in that case.
     @discardableResult
     public static func send(_ message: NotchMessage) -> Bool {
+        guard let fd = connectAndSend(message) else { return false }
+        close(fd)
+        return true
+    }
+
+    /// Sends a message and waits up to `timeout` for a one-line JSON reply.
+    /// Returns nil if the app isn't running, closes the connection without
+    /// answering, or doesn't answer in time.
+    public static func request(_ message: NotchMessage, timeout: TimeInterval) -> NotchMessage? {
+        guard let fd = connectAndSend(message) else { return nil }
+        defer { close(fd) }
+        var wait = timeval(tv_sec: Int(timeout), tv_usec: 0)
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &wait, socklen_t(MemoryLayout<timeval>.size))
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while data.count < 1 << 20 {
+            let n = read(fd, &buffer, buffer.count)
+            if n <= 0 { break }
+            data.append(contentsOf: buffer[0..<n])
+            if buffer[0..<n].contains(0x0A) { break }
+        }
+        guard let line = data.split(separator: 0x0A).first else { return nil }
+        return (try? JSONSerialization.jsonObject(with: Data(line))) as? NotchMessage
+    }
+
+    /// Connects, writes the message as one line and returns the open socket.
+    private static func connectAndSend(_ message: NotchMessage) -> Int32? {
         guard JSONSerialization.isValidJSONObject(message),
-              var data = try? JSONSerialization.data(withJSONObject: message) else { return false }
+              var data = try? JSONSerialization.data(withJSONObject: message) else { return nil }
         data.append(0x0A)
 
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
-        guard fd >= 0 else { return false }
-        defer { close(fd) }
+        guard fd >= 0 else { return nil }
 
         var noSigPipe: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
@@ -38,7 +64,7 @@ public enum NotchClient {
         var addr = sockaddr_un()
         addr.sun_family = sa_family_t(AF_UNIX)
         let path = NotchPaths.socket
-        guard path.utf8.count < MemoryLayout.size(ofValue: addr.sun_path) else { return false }
+        guard path.utf8.count < MemoryLayout.size(ofValue: addr.sun_path) else { close(fd); return nil }
         withUnsafeMutableBytes(of: &addr.sun_path) { buf in
             path.withCString { strncpy(buf.baseAddress!.assumingMemoryBound(to: CChar.self), $0, buf.count - 1) }
         }
@@ -47,11 +73,11 @@ public enum NotchClient {
                 connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size))
             }
         }
-        guard connected == 0 else { return false }
-
-        return data.withUnsafeBytes { buf in
+        let written = connected == 0 && data.withUnsafeBytes { buf in
             write(fd, buf.baseAddress, buf.count) == buf.count
         }
+        guard written else { close(fd); return nil }
+        return fd
     }
 }
 

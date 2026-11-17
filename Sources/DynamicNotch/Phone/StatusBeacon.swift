@@ -34,6 +34,8 @@ final class StatusBeacon: NSObject, ObservableObject {
     private var lastValue = Data()
     /// Sealed value served to plain reads; reused across long-read offsets.
     private var readValue = Data()
+    /// Same, for the permission request characteristic.
+    private var requestReadValue = Data()
     private var key: SymmetricKey = {
         if let key = AgentLinkKey.load() { return key }
         let key = SymmetricKey(size: .bits256)
@@ -48,6 +50,7 @@ final class StatusBeacon: NSObject, ObservableObject {
     private static let serviceUUID = CBUUID(string: AgentLink.serviceUUID)
     private static let statusUUID = CBUUID(string: AgentLink.statusUUID)
     private static let commandUUID = CBUUID(string: AgentLink.commandUUID)
+    private static let requestUUID = CBUUID(string: AgentLink.requestUUID)
     /// The newest command accepted, so older (replayed) ones are rejected.
     private var lastCommandAt: Int64 = 0
 
@@ -74,10 +77,11 @@ final class StatusBeacon: NSObject, ObservableObject {
             }
         }
         // Any change that the phone shows triggers a (coalesced) send.
-        Publishers.Merge3(
+        Publishers.Merge4(
             ClaudeStore.shared.$sessions.map { _ in () },
             CaffeinateController.shared.$isOn.map { _ in () },
-            BatteryMonitor.shared.$state.removeDuplicates().map { _ in () }
+            BatteryMonitor.shared.$state.removeDuplicates().map { _ in () },
+            PermissionStore.shared.$requests.map { _ in () }
         )
         .debounce(for: .milliseconds(400), scheduler: RunLoop.main)
         .sink { MainActor.assumeIsolated { StatusBeacon.shared.publish() } }
@@ -113,9 +117,12 @@ final class StatusBeacon: NSObject, ObservableObject {
             AgentStatus.Agent(project: $0.project, state: $0.state == .waiting ? .waiting : .working, since: $0.since)
         }
         let battery = BatteryMonitor.shared.state
+        let requests = PermissionStore.shared.requests
         return AgentStatus(agents: busy, caffeinated: CaffeinateController.shared.isOn,
                            canCaffeinate: CaffeinateController.shared.isSetUp,
-                           battery: battery?.percent, charging: battery?.onAC ?? false)
+                           battery: battery?.percent, charging: battery?.onAC ?? false,
+                           pendingRequest: requests.first?.prompt.id,
+                           pendingRequests: requests.isEmpty ? nil : requests.count)
     }
 
     /// Sends the current status to subscribed phones.
@@ -199,8 +206,10 @@ final class StatusBeacon: NSObject, ObservableObject {
             permissions: [.readable])
         let command = CBMutableCharacteristic(type: Self.commandUUID, properties: [.write], value: nil,
                                               permissions: [.writeable])
+        let request = CBMutableCharacteristic(type: Self.requestUUID, properties: [.read], value: nil,
+                                              permissions: [.readable])
         let service = CBMutableService(type: Self.serviceUUID, primary: true)
-        service.characteristics = [characteristic, command]
+        service.characteristics = [characteristic, command, request]
         self.characteristic = characteristic
         manager.add(service)
     }
@@ -308,6 +317,16 @@ extension StatusBeacon: CBPeripheralManagerDelegate {
                 log.notice("iPhone turned Caffeinated mode \(command.on ? "on" : "off", privacy: .public)")
                 let caffeinate = CaffeinateController.shared
                 if command.on { caffeinate.turnOn() } else { caffeinate.turnOff(reason: "Turned off from your iPhone") }
+
+            case .permission:
+                guard let id = command.request, let decision = command.decision else {
+                    peripheral.respond(to: request, withResult: .requestNotSupported)
+                    return
+                }
+                lastCommandAt = command.sentAt
+                // Already answered in the terminal, or Claude stopped waiting.
+                let answered = PermissionStore.shared.answer(id: id, with: decision)
+                peripheral.respond(to: request, withResult: answered ? .success : .attributeNotFound)
             }
         }
     }
@@ -316,10 +335,17 @@ extension StatusBeacon: CBPeripheralManagerDelegate {
     nonisolated func peripheralManager(_ peripheral: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
         MainActor.assumeIsolated {
             log.notice("Read request at offset \(request.offset, privacy: .public)")
+            let isPermission = request.characteristic.uuid == Self.requestUUID
             if request.offset == 0 {
-                readValue = AgentLink.seal(currentStatus().encoded(), key: key) ?? Data()
+                if isPermission {
+                    // An empty value means nothing is waiting any more.
+                    let plain = PermissionStore.shared.requests.first?.prompt.encoded() ?? Data()
+                    requestReadValue = plain.isEmpty ? Data() : AgentLink.seal(plain, key: key) ?? Data()
+                } else {
+                    readValue = AgentLink.seal(currentStatus().encoded(), key: key) ?? Data()
+                }
             }
-            let value = readValue
+            let value = isPermission ? requestReadValue : readValue
             guard request.offset <= value.count else {
                 peripheral.respond(to: request, withResult: .invalidOffset)
                 return

@@ -15,9 +15,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowController?.start()
         statusMenu.install()
 
-        server = SocketServer { message in
+        server = SocketServer(onMessage: { message in
             Task { @MainActor in MessageRouter.handle(message) }
-        }
+        }, onRequest: { message, reply in
+            Task { @MainActor in MessageRouter.handle(message, reply: reply) }
+        })
         do {
             try server?.start()
         } catch {

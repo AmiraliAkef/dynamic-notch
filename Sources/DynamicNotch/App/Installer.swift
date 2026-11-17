@@ -16,13 +16,24 @@ enum Installer {
     }
 
     static let claudeEvents = ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
-                               "Notification", "Stop", "SessionEnd"]
+                               "Notification", "Stop", "SessionEnd", "PermissionRequest"]
 
     static var claudeHookCommand: String { "'\(cliPath)' claude-hook" }
 
     static var claudeHooksInstalled: Bool {
         guard let text = try? String(contentsOf: claudeSettingsURL, encoding: .utf8) else { return false }
         return text.contains(claudeHookCommand.replacingOccurrences(of: "/", with: "\\/")) || text.contains(claudeHookCommand)
+    }
+
+    /// Whether the installed hooks include `PermissionRequest` (added later,
+    /// so older installs need "Reinstall Claude Code hooks").
+    static var claudePermissionHookInstalled: Bool {
+        guard let data = try? Data(contentsOf: claudeSettingsURL),
+              let settings = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let groups = (settings["hooks"] as? [String: Any])?["PermissionRequest"] as? [[String: Any]] else { return false }
+        return groups.contains { group in
+            (group["hooks"] as? [[String: Any]] ?? []).contains { ($0["command"] as? String) == claudeHookCommand }
+        }
     }
 
     /// Adds our hook to each Claude Code event in ~/.claude/settings.json,
@@ -52,8 +63,11 @@ enum Installer {
                 group["hooks"] = inner
                 return group
             }
-            var group: [String: Any] = ["hooks": [["type": "command", "command": claudeHookCommand, "timeout": 5]]]
-            if event == "PreToolUse" || event == "PostToolUse" { group["matcher"] = "*" }
+            // The permission hook waits (up to ~10 min) for an answer from the iPhone;
+            // Claude Code's own prompt in the terminal stays usable meanwhile.
+            let timeout = event == "PermissionRequest" ? 600 : 5
+            var group: [String: Any] = ["hooks": [["type": "command", "command": claudeHookCommand, "timeout": timeout]]]
+            if ["PreToolUse", "PostToolUse", "PermissionRequest"].contains(event) { group["matcher"] = "*" }
             groups.append(group)
             hooks[event] = groups
         }

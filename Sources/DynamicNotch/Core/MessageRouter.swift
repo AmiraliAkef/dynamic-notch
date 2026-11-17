@@ -68,6 +68,16 @@ enum MessageRouter {
         }
     }
 
+    /// Messages whose sender waits for an answer on `reply`.
+    static func handle(_ message: [String: Any], reply: SocketReply) {
+        switch message["kind"] as? String {
+        case "permission":
+            PermissionStore.shared.add(message, reply: reply)
+        default:
+            reply.send([:])
+        }
+    }
+
     static func performBannerAction(_ id: String) {
         if id.hasPrefix("timer.stop."), let uuid = UUID(uuidString: String(id.dropFirst("timer.stop.".count))) {
             TimerStore.shared.cancel(uuid)

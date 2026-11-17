@@ -21,6 +21,14 @@ Over **Bluetooth LE**, with no server, no push notifications and no paid develop
 
 The ☕ button on the Lock Screen banner and in the expanded Dynamic Island (and the toggle in the app) turns Caffeinated mode on the Mac on or off. The command is written to a second Bluetooth characteristic, sealed with the same pairing key and timestamped, so only your phone can send one and a recorded command can't be replayed. Caffeinated mode must be set up on the Mac once first (it needs your admin password).
 
+## Permission requests from the iPhone
+
+When Claude Code asks for permission (run a command, edit a file, fetch a page…), the Dynamic Island expands with a sound and shows what it wants to do, with **Deny** and **Allow**. The same card replaces the agent list on the Lock Screen. The app shows the full command and, when Claude Code offers one, **Always allow** (it adds the same rule as "Yes, and don't ask again" in the terminal).
+
+The prompt in the terminal keeps working at the same time, so you can answer at whichever device is closer. Requests that need a typed answer (Claude's multiple-choice questions, plan approval) stay in the terminal. A request waits for the phone for up to about 10 minutes.
+
+On the Mac this needs the updated Claude Code hooks: choose *Update Claude Code hooks to answer on iPhone* in the Dynamic Notch menu.
+
 ## Limits
 
 - **Range**: Bluetooth reaches about 10 m.

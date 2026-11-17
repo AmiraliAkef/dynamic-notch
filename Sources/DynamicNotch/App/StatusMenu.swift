@@ -167,6 +167,13 @@ final class StatusMenu: NSObject, NSMenuDelegate {
             let info = NSMenuItem(title: "    \(beacon.statusDescription)", action: nil, keyEquivalent: "")
             info.isEnabled = false
             menu.addItem(info)
+            menu.addItem(toggle("    Answer permission requests on iPhone", settings.bool(Settings.Key.phonePermissions)) {
+                settings.set(Settings.Key.phonePermissions, !settings.bool(Settings.Key.phonePermissions))
+            })
+            if settings.bool(Settings.Key.phonePermissions) && Installer.claudeHooksInstalled
+                && !Installer.claudePermissionHookInstalled {
+                menu.addItem(action("    Update Claude Code hooks to answer on iPhone") { Installer.installClaudeHooks() })
+            }
             menu.addItem(action("    Pair iPhone…") { beacon.showPairing() })
         }
     }

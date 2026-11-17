@@ -51,6 +51,16 @@ final class ClaudeStore: ObservableObject {
         session.lastEvent = .now
         let previous = session.state
 
+        // A prompt answered in the terminal: release the hook still waiting for the phone.
+        switch event {
+        case "PostToolUse":
+            PermissionStore.shared.answeredElsewhere(session: id, fingerprint: message["fingerprint"] as? String)
+        case "UserPromptSubmit", "Stop", "SessionEnd":
+            PermissionStore.shared.answeredElsewhere(session: id)
+        default:
+            break
+        }
+
         switch event {
         case "SessionStart":
             break

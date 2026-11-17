@@ -25,6 +25,7 @@ final class Settings: ObservableObject {
             Key.caffeinateDuration: CaffeinateController.indefinitely,
             Key.caffeinateMinBattery: 20,
             Key.phoneBeacon: true,
+            Key.phonePermissions: true,
         ])
     }
 
@@ -45,6 +46,7 @@ final class Settings: ObservableObject {
         static let caffeinateDuration = "caffeinate.duration"
         static let caffeinateMinBattery = "caffeinate.minBattery"
         static let phoneBeacon = "phone.beacon"
+        static let phonePermissions = "phone.permissions"
     }
 
     func bool(_ key: String) -> Bool { defaults.bool(forKey: key) }
