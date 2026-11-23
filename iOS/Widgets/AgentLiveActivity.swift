@@ -22,28 +22,33 @@ struct AgentLiveActivity: Widget {
             let indicator = Indicator(state, isStale: context.isStale)
             let prompt = state.answerablePrompt(isStale: context.isStale)
             return DynamicIsland {
+                // The leading and trailing regions sit beside the camera and are
+                // narrow, so they only hold the dot and the badges; the title
+                // goes in the full-width area below the camera.
                 DynamicIslandExpandedRegion(.leading) {
-                    HStack(spacing: 8) {
-                        IndicatorDot(indicator: indicator, size: 10)
-                        // With a request, the card below says what it is; keep this short.
-                        Text(prompt?.project ?? state.headline(isStale: context.isStale))
-                            .font(.headline)
-                            .lineLimit(1)
-                    }
-                    .padding(.leading, 4)
+                    IndicatorDot(indicator: indicator, size: 10)
+                        .padding(.leading, 4)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     MacBadges(status: state.status, interactive: indicator != .offline)
                         .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    if let prompt {
-                        PermissionCard(prompt: prompt, more: state.morePrompts, detailLines: 2)
-                            .padding(.horizontal, 4)
-                    } else {
-                        AgentList(state: state, isStale: context.isStale, limit: 3)
-                            .padding(.horizontal, 4)
+                    VStack(alignment: .leading, spacing: 8) {
+                        if let prompt {
+                            // The card's header names the project, which keeps it short enough.
+                            PermissionCard(prompt: prompt, more: state.morePrompts, detailLines: 2, showsProject: true)
+                        } else {
+                            Text(state.headline(isStale: context.isStale))
+                                .font(.headline)
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            AgentList(state: state, isStale: context.isStale, limit: 3)
+                        }
                     }
+                    .padding(.horizontal, 4)
                 }
             } compactLeading: {
                 IndicatorDot(indicator: indicator)
@@ -167,6 +172,8 @@ private struct PermissionCard: View {
     var prompt: PermissionPrompt
     var more: Int
     var detailLines: Int
+    /// The Lock Screen's header already names the project; the island's doesn't.
+    var showsProject = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -178,6 +185,13 @@ private struct PermissionCard: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
+                    .layoutPriority(1)
+                if showsProject {
+                    Text("· \(prompt.project)")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
                 Spacer(minLength: 6)
                 if more > 0 {
                     Text("+\(more) more").font(.caption2).foregroundStyle(.secondary)
